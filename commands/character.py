@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import json
 import os
-from .character_data import CharacterData, create_embed, load_character, save_character, delete_character
+from .character_data import CharacterData, create_embed, load_character, load_all_characters, save_character, delete_character
 
 # Gallery config file
 GALLERY_CONFIG_FILE = "data/gallery_config.json"
@@ -171,9 +171,10 @@ class ConfirmView(discord.ui.View):
         )
 
 class ConfirmDeleteView(discord.ui.View):
-    def __init__(self, user):
+    def __init__(self, user, character_id=None):
         super().__init__(timeout=60)
         self.user = user
+        self.character_id = character_id
 
     @discord.ui.button(label="Si, elimina", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -184,7 +185,7 @@ class ConfirmDeleteView(discord.ui.View):
             )
             return
 
-        if delete_character(self.user.id):
+        if delete_character(self.user.id, self.character_id):
             await interaction.response.edit_message(
                 content="Personaggio eliminato permanentemente.",
                 view=None
@@ -208,6 +209,41 @@ class ConfirmDeleteView(discord.ui.View):
             content="Eliminazione annullata.",
             view=None
         )
+
+class CharacterSelectView(discord.ui.View):
+    def __init__(self, user, characters, callback):
+        super().__init__(timeout=60)
+        self.user = user
+        self.characters = characters
+        self.callback = callback
+        
+        # Crea un select menu con i personaggi
+        options = [
+            discord.SelectOption(
+                label=char.nome[:100],
+                value=char.character_id,
+                description=f"ID: {char.character_id}"
+            )
+            for char in characters
+        ]
+        
+        select = discord.ui.Select(
+            placeholder="Scegli un personaggio...",
+            options=options
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+    
+    async def on_select(self, interaction: discord.Interaction):
+        if interaction.user != self.user:
+            await interaction.response.send_message(
+                "Non puoi selezionare il personaggio di un altro.",
+                ephemeral=True
+            )
+            return
+        
+        character_id = interaction.data["values"][0]
+        await self.callback(interaction, character_id)
 
 class CharacterCog(commands.Cog):
     def __init__(self, bot):
@@ -235,7 +271,7 @@ class CharacterCog(commands.Cog):
             )
             
             # Salva il message ID per possibili aggiornamenti futuri
-            self.character_messages[user.id] = message.id
+            self.character_messages[data.character_id] = message.id
             return message
         except Exception as e:
             print(f"Errore nel posting della galleria: {e}")
@@ -270,79 +306,152 @@ class CharacterCog(commands.Cog):
         message = await interaction.original_response()
         view.message = message
 
-    @discord.app_commands.command(name="modifica", description="Modifica il tuo personaggio")
+    @discord.app_commands.command(name="modifica", description="Modifica uno dei tuoi personaggi")
     async def modifica(self, interaction: discord.Interaction):
-        """Modifica il personaggio salvato"""
-        data = load_character(interaction.user.id)
+        """Modifica un personaggio salvato"""
+        characters = load_all_characters(interaction.user.id)
         
-        if data is None:
+        if not characters:
             await interaction.response.send_message(
-                "Non hai un personaggio salvato. Usa /crea per crearne uno!",
+                "Non hai personaggi salvati. Usa /crea per crearne uno!",
                 ephemeral=True
             )
             return
-
-        view = EmbedEditor(data, user_id=interaction.user.id, bot=self.bot)
         
-        await interaction.response.send_message(
-            embed=create_embed(data),
-            view=view,
-            ephemeral=True
-        )
+        if len(characters) == 1:
+            # Se c'è solo un personaggio, caricalo direttamente
+            data = characters[0]
+            view = EmbedEditor(data, user_id=interaction.user.id, bot=self.bot)
+            
+            await interaction.response.send_message(
+                embed=create_embed(data),
+                view=view,
+                ephemeral=True
+            )
+            
+            message = await interaction.original_response()
+            view.message = message
+        else:
+            # Se ce ne sono più, mostra un select menu
+            async def on_select(inter, character_id):
+                data = load_character(interaction.user.id, character_id)
+                view = EmbedEditor(data, user_id=interaction.user.id, bot=self.bot)
+                
+                await inter.response.send_message(
+                    embed=create_embed(data),
+                    view=view,
+                    ephemeral=True
+                )
+                
+                message = await inter.original_response()
+                view.message = message
+            
+            select_view = CharacterSelectView(interaction.user, characters, on_select)
+            await interaction.response.send_message(
+                "Quale personaggio vuoi modificare?",
+                view=select_view,
+                ephemeral=True
+            )
 
-        message = await interaction.original_response()
-        view.message = message
-
-    @discord.app_commands.command(name="mostra", description="Mostra il tuo personaggio salvato")
+    @discord.app_commands.command(name="mostra", description="Mostra uno dei tuoi personaggi salvati")
     async def mostra(self, interaction: discord.Interaction):
-        """Mostra il personaggio salvato"""
-        data = load_character(interaction.user.id)
+        """Mostra un personaggio salvato"""
+        characters = load_all_characters(interaction.user.id)
         
-        if data is None:
+        if not characters:
             await interaction.response.send_message(
-                "Non hai un personaggio salvato. Usa /crea per crearne uno!",
+                "Non hai personaggi salvati. Usa /crea per crearne uno!",
                 ephemeral=True
             )
             return
+        
+        if len(characters) == 1:
+            # Se c'è solo un personaggio, mostralo direttamente
+            data = characters[0]
+            embed = create_embed(data)
+            view = ConfirmView(interaction.user, embed)
 
-        embed = create_embed(data)
-        view = ConfirmView(interaction.user, embed)
+            await interaction.response.send_message(
+                content="Questo va bene?",
+                embed=embed,
+                view=view,
+                ephemeral=True
+            )
+        else:
+            # Se ce ne sono più, mostra un select menu
+            async def on_select(inter, character_id):
+                data = load_character(interaction.user.id, character_id)
+                embed = create_embed(data)
+                view = ConfirmView(interaction.user, embed)
 
-        await interaction.response.send_message(
-            content="Questo va bene?",
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
+                await inter.response.send_message(
+                    content="Questo va bene?",
+                    embed=embed,
+                    view=view,
+                    ephemeral=True
+                )
+            
+            select_view = CharacterSelectView(interaction.user, characters, on_select)
+            await interaction.response.send_message(
+                "Quale personaggio vuoi mostrare?",
+                view=select_view,
+                ephemeral=True
+            )
 
-    @discord.app_commands.command(name="elimina", description="Elimina il tuo personaggio")
+    @discord.app_commands.command(name="elimina", description="Elimina uno dei tuoi personaggi")
     async def elimina(self, interaction: discord.Interaction):
-        """Elimina il personaggio salvato"""
-        data = load_character(interaction.user.id)
+        """Elimina un personaggio salvato"""
+        characters = load_all_characters(interaction.user.id)
         
-        if data is None:
+        if not characters:
             await interaction.response.send_message(
-                "Non hai un personaggio salvato.",
+                "Non hai personaggi salvati.",
                 ephemeral=True
             )
             return
+        
+        if len(characters) == 1:
+            # Se c'è solo un personaggio, chiedi conferma direttamente
+            data = characters[0]
+            embed = discord.Embed(
+                title="Conferma Eliminazione",
+                description=f"Sei sicuro di voler eliminare il personaggio {data.nome}? Questa azione e irreversibile!",
+                color=discord.Color.red()
+            )
 
-        embed = discord.Embed(
-            title="Conferma Eliminazione",
-            description=f"Sei sicuro di voler eliminare il personaggio {data.nome}? Questa azione e irreversibile!",
-            color=discord.Color.red()
-        )
+            view = ConfirmDeleteView(interaction.user, data.character_id)
+            await interaction.response.send_message(
+                embed=embed,
+                view=view,
+                ephemeral=True
+            )
+        else:
+            # Se ce ne sono più, mostra un select menu
+            async def on_select(inter, character_id):
+                data = load_character(interaction.user.id, character_id)
+                embed = discord.Embed(
+                    title="Conferma Eliminazione",
+                    description=f"Sei sicuro di voler eliminare il personaggio {data.nome}? Questa azione e irreversibile!",
+                    color=discord.Color.red()
+                )
 
-        view = ConfirmDeleteView(interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
+                view = ConfirmDeleteView(interaction.user, character_id)
+                await inter.response.send_message(
+                    embed=embed,
+                    view=view,
+                    ephemeral=True
+                )
+            
+            select_view = CharacterSelectView(interaction.user, characters, on_select)
+            await interaction.response.send_message(
+                "Quale personaggio vuoi eliminare?",
+                view=select_view,
+                ephemeral=True
+            )
 
-    @discord.app_commands.command(name="pubblica", description="Pubblica il tuo personaggio nella galleria")
+    @discord.app_commands.command(name="pubblica", description="Pubblica uno dei tuoi personaggi nella galleria")
     async def pubblica(self, interaction: discord.Interaction):
-        """Pubblica il personaggio nella galleria"""
+        """Pubblica un personaggio nella galleria"""
         if not interaction.guild:
             await interaction.response.send_message(
                 "Questo comando funziona solo in un server!",
@@ -350,11 +459,11 @@ class CharacterCog(commands.Cog):
             )
             return
 
-        data = load_character(interaction.user.id)
+        characters = load_all_characters(interaction.user.id)
         
-        if data is None:
+        if not characters:
             await interaction.response.send_message(
-                "Non hai un personaggio salvato. Usa /crea per crearne uno!",
+                "Non hai personaggi salvati. Usa /crea per crearne uno!",
                 ephemeral=True
             )
             return
@@ -368,18 +477,45 @@ class CharacterCog(commands.Cog):
             )
             return
 
-        message = await self.post_to_gallery(interaction.guild.id, interaction.user, data)
-        
-        if message:
-            await interaction.response.send_message(
-                f"Personaggio pubblicato nella galleria! [Vai al messaggio]({message.jump_url})",
-                ephemeral=True
-            )
+        if len(characters) == 1:
+            # Se c'è solo un personaggio, pubblicalo direttamente
+            data = characters[0]
+            message = await self.post_to_gallery(interaction.guild.id, interaction.user, data)
+            
+            if message:
+                await interaction.response.send_message(
+                    f"Personaggio pubblicato nella galleria! [Vai al messaggio]({message.jump_url})",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    "Errore nel pubblicare il personaggio.",
+                    ephemeral=True
+                )
         else:
+            # Se ce ne sono più, mostra un select menu
+            async def on_select(inter, character_id):
+                data = load_character(interaction.user.id, character_id)
+                message = await self.post_to_gallery(interaction.guild.id, interaction.user, data)
+                
+                if message:
+                    await inter.response.send_message(
+                        f"Personaggio pubblicato nella galleria! [Vai al messaggio]({message.jump_url})",
+                        ephemeral=True
+                    )
+                else:
+                    await inter.response.send_message(
+                        "Errore nel pubblicare il personaggio.",
+                        ephemeral=True
+                    )
+            
+            select_view = CharacterSelectView(interaction.user, characters, on_select)
             await interaction.response.send_message(
-                "Errore nel pubblicare il personaggio.",
+                "Quale personaggio vuoi pubblicare?",
+                view=select_view,
                 ephemeral=True
             )
 
 async def setup(bot):
     await bot.add_cog(CharacterCog(bot))
+
