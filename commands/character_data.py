@@ -21,16 +21,15 @@ def create_embed(data: CharacterData):
         color=discord.Color.from_str(data.hex_color)
     )
 
-    embed.add_field(name="🪪 Identità", value=data.identita, inline=True)
-    embed.add_field(name="🌍 Origine", value=data.origine, inline=True)
-    embed.add_field(name="🎨 Tema", value=data.tema, inline=True)
-    embed.add_field(name="⚔️ Classe", value=data.classe, inline=True)
-    embed.add_field(name="✨ Abilità Eroiche", value=data.abilita, inline=False)
+    embed.add_field(name="Identita", value=data.identita, inline=True)
+    embed.add_field(name="Origine", value=data.origine, inline=True)
+    embed.add_field(name="Tema", value=data.tema, inline=True)
+    embed.add_field(name="Classe", value=data.classe, inline=True)
+    embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
 
-    embed.add_field(name="🎨 Hex Color", value=data.hex_color, inline=True)
     embed.set_footer(text="Editor personaggio interattivo")
 
     return embed
