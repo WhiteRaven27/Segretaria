@@ -1,6 +1,38 @@
 import discord
 from discord.ext import commands
+import json
+import os
 from .character_data import CharacterData, create_embed, load_character, save_character, delete_character
+
+# Gallery config file
+GALLERY_CONFIG_FILE = "data/gallery_config.json"
+
+def load_gallery_config():
+    """Carica la configurazione della galleria"""
+    if os.path.exists(GALLERY_CONFIG_FILE):
+        try:
+            with open(GALLERY_CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_gallery_config(config):
+    """Salva la configurazione della galleria"""
+    os.makedirs("data", exist_ok=True)
+    with open(GALLERY_CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+
+def get_gallery_channel(guild_id):
+    """Ottiene il channel della galleria per un server"""
+    config = load_gallery_config()
+    return config.get(str(guild_id))
+
+def set_gallery_channel(guild_id, channel_id):
+    """Imposta il channel della galleria per un server"""
+    config = load_gallery_config()
+    config[str(guild_id)] = channel_id
+    save_gallery_config(config)
 
 class EditModal(discord.ui.Modal):
     def __init__(self, title, field_name, data, message, view):
@@ -35,11 +67,12 @@ class EditModal(discord.ui.Modal):
         )
 
 class EmbedEditor(discord.ui.View):
-    def __init__(self, data, message=None, user_id=None):
+    def __init__(self, data, message=None, user_id=None, bot=None):
         super().__init__(timeout=None)
         self.data = data
         self.message = message
         self.user_id = user_id
+        self.bot = bot
 
     async def open_modal(self, interaction, title, field_name):
         modal = EditModal(
@@ -179,20 +212,63 @@ class ConfirmDeleteView(discord.ui.View):
 class CharacterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.character_messages = {}  # Per tracciare i messaggi dei personaggi in galleria
+
+    async def post_to_gallery(self, guild_id, user, data):
+        """Posta il personaggio nella galleria"""
+        gallery_channel_id = get_gallery_channel(guild_id)
+        
+        if not gallery_channel_id:
+            return None
+        
+        try:
+            gallery_channel = self.bot.get_channel(gallery_channel_id)
+            if not gallery_channel:
+                return None
+            
+            embed = create_embed(data)
+            embed.set_footer(text=f"Creato da {user.name}#{user.discriminator}")
+            
+            message = await gallery_channel.send(
+                content=f"✨ **Nuovo Personaggio da {user.mention}**",
+                embed=embed
+            )
+            
+            # Salva il message ID per possibili aggiornamenti futuri
+            self.character_messages[user.id] = message.id
+            return message
+        except Exception as e:
+            print(f"❌ Errore nel posting della galleria: {e}")
+            return None
+
+    @discord.app_commands.command(name="set-gallery", description="Imposta il channel per la galleria dei personaggi")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def set_gallery(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Imposta il channel della galleria (solo admin)"""
+        set_gallery_channel(interaction.guild.id, channel.id)
+        
+        embed = discord.Embed(
+            title="✅ Galleria Configurata",
+            description=f"La galleria dei personaggi è stata impostata su {channel.mention}",
+            color=discord.Color.green()
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.app_commands.command(name="crea", description="Crea un nuovo personaggio")
     async def crea(self, interaction: discord.Interaction):
         """Crea un nuovo personaggio"""
         data = CharacterData()
-        view = EmbedEditor(data, user_id=interaction.user.id)
+        view = EmbedEditor(data, user_id=interaction.user.id, bot=self.bot)
 
-        message = await interaction.response.send_message(
+        await interaction.response.send_message(
             embed=create_embed(data),
             view=view,
             ephemeral=True
         )
 
-        view.message = await interaction.original_response()
+        message = await interaction.original_response()
+        view.message = message
 
     @discord.app_commands.command(name="modifica", description="Modifica il tuo personaggio")
     async def modifica(self, interaction: discord.Interaction):
@@ -206,14 +282,16 @@ class CharacterCog(commands.Cog):
             )
             return
 
-        view = EmbedEditor(data, user_id=interaction.user.id)
-        message = await interaction.response.send_message(
+        view = EmbedEditor(data, user_id=interaction.user.id, bot=self.bot)
+        
+        await interaction.response.send_message(
             embed=create_embed(data),
             view=view,
             ephemeral=True
         )
 
-        view.message = await interaction.original_response()
+        message = await interaction.original_response()
+        view.message = message
 
     @discord.app_commands.command(name="mostra", description="Mostra il tuo personaggio salvato")
     async def mostra(self, interaction: discord.Interaction):
@@ -261,6 +339,47 @@ class CharacterCog(commands.Cog):
             view=view,
             ephemeral=True
         )
+
+    @discord.app_commands.command(name="pubblica", description="Pubblica il tuo personaggio nella galleria")
+    async def pubblica(self, interaction: discord.Interaction):
+        """Pubblica il personaggio nella galleria"""
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "❌ Questo comando funziona solo in un server!",
+                ephemeral=True
+            )
+            return
+
+        data = load_character(interaction.user.id)
+        
+        if data is None:
+            await interaction.response.send_message(
+                "❌ Non hai un personaggio salvato. Usa `/crea` per crearne uno!",
+                ephemeral=True
+            )
+            return
+
+        gallery_channel_id = get_gallery_channel(interaction.guild.id)
+        
+        if not gallery_channel_id:
+            await interaction.response.send_message(
+                "❌ Nessuna galleria configurata. Chiedi a un admin di usare `/set-gallery`",
+                ephemeral=True
+            )
+            return
+
+        message = await self.post_to_gallery(interaction.guild.id, interaction.user, data)
+        
+        if message:
+            await interaction.response.send_message(
+                f"✅ Personaggio pubblicato nella galleria! [Vai al messaggio]({message.jump_url})",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ Errore nel pubblicare il personaggio.",
+                ephemeral=True
+            )
 
 async def setup(bot):
     await bot.add_cog(CharacterCog(bot))
