@@ -1,9 +1,19 @@
 import os
 from dotenv import load_dotenv
+import json
 
+# Load environment variables from .env file (if it exists)
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
+
+# Make sure data directory exists
+if not os.path.exists("data"):
+    os.makedirs("data")
+
+if not os.path.exists("data/characters.json"):
+    with open("data/characters.json", "w") as f:
+        json.dump({}, f)
 
 import discord
 from discord.ext import commands
@@ -255,13 +265,3 @@ async def on_ready():
     print(f"Connesso come {bot.user}")
 
 bot.run(TOKEN)
-
-import json
-import os
-
-if not os.path.exists("data"):
-    os.makedirs("data")
-
-if not os.path.exists("data/characters.json"):
-    with open("data/characters.json", "w") as f:
-        json.dump({}, f)
