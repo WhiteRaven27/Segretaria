@@ -61,10 +61,9 @@ class EditModal(discord.ui.Modal):
             view=self.view_ref
         )
 
-        await interaction.response.send_message(
-            f"Campo aggiornato: {self.field_name}",
-            ephemeral=True
-        )
+        # Non inviare un messaggio di conferma - l'embed aggiornato è la conferma
+
+        await interaction.response.defer()
 
 class EmbedEditor(discord.ui.View):
     def __init__(self, data, message=None, user_id=None, bot=None):
@@ -111,7 +110,7 @@ class EmbedEditor(discord.ui.View):
 
     @discord.ui.button(label="Abilita", style=discord.ButtonStyle.success)
     async def abilita_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.open_modal(interaction, "Abilita Eroiche", "abilita")
+        await self.open_modal(interaction, "Abilita Eroiche (opzionale)", "abilita")
 
     @discord.ui.button(label="Colore", style=discord.ButtonStyle.danger)
     async def hex_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -124,6 +123,23 @@ class EmbedEditor(discord.ui.View):
     @discord.ui.button(label="Salva", style=discord.ButtonStyle.success)
     async def salva_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         save_character(self.user_id, self.data)
+        
+        # Prova a pubblicare automaticamente nella galleria se configurata
+        if interaction.guild:
+            gallery_channel_id = get_gallery_channel(interaction.guild.id)
+            if gallery_channel_id and self.bot:
+                try:
+                    gallery_channel = self.bot.get_channel(gallery_channel_id)
+                    if gallery_channel:
+                        embed = create_embed(self.data)
+                        embed.set_footer(text=f"Creato da {interaction.user.name}#{interaction.user.discriminator}")
+                        await gallery_channel.send(
+                            content=f"Personaggio aggiornato da {interaction.user.mention}",
+                            embed=embed
+                        )
+                except Exception as e:
+                    print(f"Errore nel posting automatico della galleria: {e}")
+        
         await interaction.response.send_message(
             f"Personaggio salvato!",
             ephemeral=True
@@ -255,16 +271,19 @@ class CharacterCog(commands.Cog):
         gallery_channel_id = get_gallery_channel(guild_id)
         
         if not gallery_channel_id:
+            print(f"DEBUG: No gallery channel configured for guild {guild_id}")
             return None
         
         try:
             gallery_channel = self.bot.get_channel(gallery_channel_id)
             if not gallery_channel:
+                print(f"DEBUG: Gallery channel {gallery_channel_id} not found")
                 return None
             
             embed = create_embed(data)
             embed.set_footer(text=f"Creato da {user.name}#{user.discriminator}")
             
+            print(f"DEBUG: Posting character {data.nome} to gallery channel {gallery_channel_id}")
             message = await gallery_channel.send(
                 content=f"Nuovo Personaggio da {user.mention}",
                 embed=embed
@@ -272,9 +291,12 @@ class CharacterCog(commands.Cog):
             
             # Salva il message ID per possibili aggiornamenti futuri
             self.character_messages[data.character_id] = message.id
+            print(f"DEBUG: Character posted successfully, message ID: {message.id}")
             return message
         except Exception as e:
             print(f"Errore nel posting della galleria: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     @discord.app_commands.command(name="set-gallery", description="Imposta il channel per la galleria dei personaggi")

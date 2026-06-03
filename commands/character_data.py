@@ -11,7 +11,7 @@ class CharacterData:
         self.tema = "Non impostato"
         self.descrizione = "Non impostata"
         self.classe = "Non impostata"
-        self.abilita = "Non impostate"
+        self.abilita = ""  # Ora opzionale
         self.immagine = None
         self.hex_color = "#5865F2"
 
@@ -27,7 +27,10 @@ def create_embed(data: CharacterData):
     embed.add_field(name="Origine", value=data.origine, inline=True)
     embed.add_field(name="Tema", value=data.tema, inline=True)
     embed.add_field(name="Classe", value=data.classe, inline=True)
-    embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
+    
+    # Mostra Abilità solo se non vuota
+    if data.abilita:
+        embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
