@@ -67,6 +67,67 @@ def create_embed(data: CharacterData):
     return embed
 
 # =========================
+# FUNZIONI PER PERSISTENZA
+# =========================
+
+def load_character(user_id):
+    """Carica il personaggio dell'utente dal file JSON"""
+    try:
+        with open("data/characters.json", "r") as f:
+            characters = json.load(f)
+        
+        if str(user_id) in characters:
+            data_dict = characters[str(user_id)]
+            data = CharacterData()
+            for key, value in data_dict.items():
+                setattr(data, key, value)
+            return data
+    except:
+        pass
+    
+    return None
+
+def save_character(user_id, data):
+    """Salva il personaggio dell'utente nel file JSON"""
+    try:
+        with open("data/characters.json", "r") as f:
+            characters = json.load(f)
+    except:
+        characters = {}
+    
+    characters[str(user_id)] = {
+        "nome": data.nome,
+        "identita": data.identita,
+        "origine": data.origine,
+        "tema": data.tema,
+        "descrizione": data.descrizione,
+        "classe": data.classe,
+        "abilita": data.abilita,
+        "immagine": data.immagine,
+        "hex_color": data.hex_color
+    }
+    
+    with open("data/characters.json", "w") as f:
+        json.dump(characters, f, indent=4)
+
+def delete_character(user_id):
+    """Elimina il personaggio dell'utente"""
+    try:
+        with open("data/characters.json", "r") as f:
+            characters = json.load(f)
+        
+        if str(user_id) in characters:
+            del characters[str(user_id)]
+            
+            with open("data/characters.json", "w") as f:
+                json.dump(characters, f, indent=4)
+            return True
+    except:
+        pass
+    
+    return False
+
+# =========================
 # MODAL GENERICO
 # =========================
 
@@ -90,6 +151,7 @@ class EditModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         setattr(self.data, self.field_name, str(self.input))
+        save_character(interaction.user.id, self.data)
 
         await self.message.edit(
             embed=create_embed(self.data),
@@ -106,10 +168,11 @@ class EditModal(discord.ui.Modal):
 # =========================
 
 class EmbedEditor(discord.ui.View):
-    def __init__(self, data, message=None):
+    def __init__(self, data, message=None, user_id=None):
         super().__init__(timeout=None)
         self.data = data
         self.message = message
+        self.user_id = user_id
 
     async def open_modal(self, interaction, title, field_name):
         modal = EditModal(
@@ -158,6 +221,14 @@ class EmbedEditor(discord.ui.View):
     async def immagine_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.open_modal(interaction, "Link Immagine", "immagine")
 
+    @discord.ui.button(label="Salva Personaggio", style=discord.ButtonStyle.success)
+    async def salva_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        save_character(self.user_id, self.data)
+        await interaction.response.send_message(
+            f"✅ Personaggio salvato!",
+            ephemeral=True
+        )
+
 # =========================
 # COMANDO
 # =========================
@@ -166,7 +237,7 @@ class EmbedEditor(discord.ui.View):
 async def crea(ctx):
     data = CharacterData()
 
-    view = EmbedEditor(data)
+    view = EmbedEditor(data, user_id=ctx.author.id)
 
     message = await ctx.send(
         embed=create_embed(data),
@@ -176,7 +247,7 @@ async def crea(ctx):
     view.message = message
 
 # =========================
-# SLASH COMMAND /personaggio mostra
+# SLASH COMMAND /mostra
 # =========================
 
 class ConfirmView(discord.ui.View):
@@ -222,30 +293,113 @@ class ConfirmView(discord.ui.View):
             embed=None
         )
 
-# =========================
-# COMANDO SLASH
-# =========================
-
-@bot.tree.command(name="mostra", description="Mostra il personaggio")
+@bot.tree.command(name="mostra", description="Mostra il personaggio salvato")
 async def mostra(interaction: discord.Interaction):
-
-    # Qui puoi recuperare i dati salvati del personaggio
-    data = CharacterData()
-
-    data.nome = "Eroe"
-    data.identita = "Sconosciuta"
-    data.origine = "Terra"
-    data.tema = "Luce"
-    data.descrizione = "Un potente guerriero"
-    data.classe = "Tank"
-    data.abilita = "Colpo eroico"
+    data = load_character(interaction.user.id)
+    
+    if data is None:
+        await interaction.response.send_message(
+            "❌ Non hai un personaggio salvato. Usa `/crea` per crearne uno!",
+            ephemeral=True
+        )
+        return
 
     embed = create_embed(data)
-
     view = ConfirmView(interaction.user, embed)
 
     await interaction.response.send_message(
         content="Questo va bene?",
+        embed=embed,
+        view=view,
+        ephemeral=True
+    )
+
+# =========================
+# SLASH COMMAND /modifica
+# =========================
+
+@bot.tree.command(name="modifica", description="Modifica il tuo personaggio")
+async def modifica(interaction: discord.Interaction):
+    data = load_character(interaction.user.id)
+    
+    if data is None:
+        await interaction.response.send_message(
+            "❌ Non hai un personaggio salvato. Usa `/crea` per crearne uno!",
+            ephemeral=True
+        )
+        return
+
+    view = EmbedEditor(data, user_id=interaction.user.id)
+    message = await interaction.response.send_message(
+        embed=create_embed(data),
+        view=view,
+        ephemeral=True
+    )
+
+    view.message = await interaction.original_response()
+
+# =========================
+# SLASH COMMAND /elimina
+# =========================
+
+class ConfirmDeleteView(discord.ui.View):
+    def __init__(self, user):
+        super().__init__(timeout=60)
+        self.user = user
+
+    @discord.ui.button(label="Sì, elimina", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            await interaction.response.send_message(
+                "❌ Non puoi eliminare il personaggio di un altro.",
+                ephemeral=True
+            )
+            return
+
+        if delete_character(self.user.id):
+            await interaction.response.edit_message(
+                content="🗑️ Personaggio eliminato permanentemente.",
+                view=None
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ Errore nell'eliminazione del personaggio.",
+                ephemeral=True
+            )
+
+    @discord.ui.button(label="No, annulla", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            await interaction.response.send_message(
+                "❌ Non puoi annullare l'eliminazione del personaggio di un altro.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.edit_message(
+            content="❌ Eliminazione annullata.",
+            view=None
+        )
+
+@bot.tree.command(name="elimina", description="Elimina il tuo personaggio")
+async def elimina(interaction: discord.Interaction):
+    data = load_character(interaction.user.id)
+    
+    if data is None:
+        await interaction.response.send_message(
+            "❌ Non hai un personaggio salvato.",
+            ephemeral=True
+        )
+        return
+
+    embed = discord.Embed(
+        title="⚠️ Conferma Eliminazione",
+        description=f"Sei sicuro di voler eliminare il personaggio **{data.nome}**? Questa azione è irreversibile!",
+        color=discord.Color.red()
+    )
+
+    view = ConfirmDeleteView(interaction.user)
+    await interaction.response.send_message(
         embed=embed,
         view=view,
         ephemeral=True
