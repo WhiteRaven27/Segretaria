@@ -255,16 +255,19 @@ class CharacterCog(commands.Cog):
         gallery_channel_id = get_gallery_channel(guild_id)
         
         if not gallery_channel_id:
+            print(f"DEBUG: No gallery channel configured for guild {guild_id}")
             return None
         
         try:
             gallery_channel = self.bot.get_channel(gallery_channel_id)
             if not gallery_channel:
+                print(f"DEBUG: Gallery channel {gallery_channel_id} not found")
                 return None
             
             embed = create_embed(data)
             embed.set_footer(text=f"Creato da {user.name}#{user.discriminator}")
             
+            print(f"DEBUG: Posting character {data.nome} to gallery channel {gallery_channel_id}")
             message = await gallery_channel.send(
                 content=f"Nuovo Personaggio da {user.mention}",
                 embed=embed
@@ -272,9 +275,12 @@ class CharacterCog(commands.Cog):
             
             # Salva il message ID per possibili aggiornamenti futuri
             self.character_messages[data.character_id] = message.id
+            print(f"DEBUG: Character posted successfully, message ID: {message.id}")
             return message
         except Exception as e:
             print(f"Errore nel posting della galleria: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     @discord.app_commands.command(name="set-gallery", description="Imposta il channel per la galleria dei personaggi")
