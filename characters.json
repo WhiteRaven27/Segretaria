@@ -1,1 +1,19 @@
-.
+{
+  "123456789": {
+    "Batman": {
+      "nome": "Batman",
+      "classe": "Detective"
+    },
+    "Robin": {
+      "nome": "Robin",
+      "classe": "Sidekick"
+    }
+  },
+
+  "987654321": {
+    "Superman": {
+      "nome": "Superman",
+      "classe": "Kryptoniano"
+    }
+  }
+}
