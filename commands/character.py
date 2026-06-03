@@ -62,7 +62,7 @@ class EditModal(discord.ui.Modal):
         )
 
         await interaction.response.send_message(
-            f"✅ Campo aggiornato: {self.field_name}",
+            f"Campo aggiornato: {self.field_name}",
             ephemeral=True
         )
 
@@ -89,9 +89,9 @@ class EmbedEditor(discord.ui.View):
     async def nome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.open_modal(interaction, "Nome", "nome")
 
-    @discord.ui.button(label="Identità", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Identita", style=discord.ButtonStyle.primary)
     async def identita_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.open_modal(interaction, "Identità", "identita")
+        await self.open_modal(interaction, "Identita", "identita")
 
     @discord.ui.button(label="Origine", style=discord.ButtonStyle.primary)
     async def origine_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -109,23 +109,23 @@ class EmbedEditor(discord.ui.View):
     async def classe_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.open_modal(interaction, "Classe", "classe")
 
-    @discord.ui.button(label="Abilità", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Abilita", style=discord.ButtonStyle.success)
     async def abilita_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.open_modal(interaction, "Abilità Eroiche", "abilita")
+        await self.open_modal(interaction, "Abilita Eroiche", "abilita")
 
-    @discord.ui.button(label="Hex Color", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Colore", style=discord.ButtonStyle.danger)
     async def hex_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.open_modal(interaction, "Hex Color (#FFFFFF)", "hex_color")
+        await self.open_modal(interaction, "Colore (#FFFFFF)", "hex_color")
 
     @discord.ui.button(label="Immagine", style=discord.ButtonStyle.danger)
     async def immagine_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.open_modal(interaction, "Link Immagine", "immagine")
 
-    @discord.ui.button(label="Salva Personaggio", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Salva", style=discord.ButtonStyle.success)
     async def salva_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         save_character(self.user_id, self.data)
         await interaction.response.send_message(
-            f"✅ Personaggio salvato!",
+            f"Personaggio salvato!",
             ephemeral=True
         )
 
@@ -135,22 +135,22 @@ class ConfirmView(discord.ui.View):
         self.user = user
         self.embed = embed
 
-    @discord.ui.button(label="Sì", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Si", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             await interaction.response.send_message(
-                "❌ Non puoi confermare questo personaggio.",
+                "Non puoi confermare questo personaggio.",
                 ephemeral=True
             )
             return
 
         await interaction.channel.send(
-            content=f"📢 Personaggio inviato da {self.user.mention}",
+            content=f"Personaggio inviato da {self.user.mention}",
             embed=self.embed
         )
 
         await interaction.response.edit_message(
-            content="✅ Personaggio inviato.",
+            content="Personaggio inviato.",
             view=None,
             embed=None
         )
@@ -159,13 +159,13 @@ class ConfirmView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             await interaction.response.send_message(
-                "❌ Non puoi annullare questo personaggio.",
+                "Non puoi annullare questo personaggio.",
                 ephemeral=True
             )
             return
 
         await interaction.response.edit_message(
-            content="❌ Invio annullato.",
+            content="Invio annullato.",
             view=None,
             embed=None
         )
@@ -175,23 +175,23 @@ class ConfirmDeleteView(discord.ui.View):
         super().__init__(timeout=60)
         self.user = user
 
-    @discord.ui.button(label="Sì, elimina", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Si, elimina", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             await interaction.response.send_message(
-                "❌ Non puoi eliminare il personaggio di un altro.",
+                "Non puoi eliminare il personaggio di un altro.",
                 ephemeral=True
             )
             return
 
         if delete_character(self.user.id):
             await interaction.response.edit_message(
-                content="🗑️ Personaggio eliminato permanentemente.",
+                content="Personaggio eliminato permanentemente.",
                 view=None
             )
         else:
             await interaction.response.send_message(
-                "❌ Errore nell'eliminazione del personaggio.",
+                "Errore nell'eliminazione del personaggio.",
                 ephemeral=True
             )
 
@@ -199,13 +199,13 @@ class ConfirmDeleteView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             await interaction.response.send_message(
-                "❌ Non puoi annullare l'eliminazione del personaggio di un altro.",
+                "Non puoi annullare l'eliminazione del personaggio di un altro.",
                 ephemeral=True
             )
             return
 
         await interaction.response.edit_message(
-            content="❌ Eliminazione annullata.",
+            content="Eliminazione annullata.",
             view=None
         )
 
@@ -230,7 +230,7 @@ class CharacterCog(commands.Cog):
             embed.set_footer(text=f"Creato da {user.name}#{user.discriminator}")
             
             message = await gallery_channel.send(
-                content=f"✨ **Nuovo Personaggio da {user.mention}**",
+                content=f"Nuovo Personaggio da {user.mention}",
                 embed=embed
             )
             
@@ -238,7 +238,7 @@ class CharacterCog(commands.Cog):
             self.character_messages[user.id] = message.id
             return message
         except Exception as e:
-            print(f"❌ Errore nel posting della galleria: {e}")
+            print(f"Errore nel posting della galleria: {e}")
             return None
 
     @discord.app_commands.command(name="set-gallery", description="Imposta il channel per la galleria dei personaggi")
@@ -248,8 +248,8 @@ class CharacterCog(commands.Cog):
         set_gallery_channel(interaction.guild.id, channel.id)
         
         embed = discord.Embed(
-            title="✅ Galleria Configurata",
-            description=f"La galleria dei personaggi è stata impostata su {channel.mention}",
+            title="Galleria Configurata",
+            description=f"La galleria dei personaggi e stata impostata su {channel.mention}",
             color=discord.Color.green()
         )
         
@@ -277,7 +277,7 @@ class CharacterCog(commands.Cog):
         
         if data is None:
             await interaction.response.send_message(
-                "❌ Non hai un personaggio salvato. Usa `/crea` per crearne uno!",
+                "Non hai un personaggio salvato. Usa /crea per crearne uno!",
                 ephemeral=True
             )
             return
@@ -300,7 +300,7 @@ class CharacterCog(commands.Cog):
         
         if data is None:
             await interaction.response.send_message(
-                "❌ Non hai un personaggio salvato. Usa `/crea` per crearne uno!",
+                "Non hai un personaggio salvato. Usa /crea per crearne uno!",
                 ephemeral=True
             )
             return
@@ -322,14 +322,14 @@ class CharacterCog(commands.Cog):
         
         if data is None:
             await interaction.response.send_message(
-                "❌ Non hai un personaggio salvato.",
+                "Non hai un personaggio salvato.",
                 ephemeral=True
             )
             return
 
         embed = discord.Embed(
-            title="⚠️ Conferma Eliminazione",
-            description=f"Sei sicuro di voler eliminare il personaggio **{data.nome}**? Questa azione è irreversibile!",
+            title="Conferma Eliminazione",
+            description=f"Sei sicuro di voler eliminare il personaggio {data.nome}? Questa azione e irreversibile!",
             color=discord.Color.red()
         )
 
@@ -345,7 +345,7 @@ class CharacterCog(commands.Cog):
         """Pubblica il personaggio nella galleria"""
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Questo comando funziona solo in un server!",
+                "Questo comando funziona solo in un server!",
                 ephemeral=True
             )
             return
@@ -354,7 +354,7 @@ class CharacterCog(commands.Cog):
         
         if data is None:
             await interaction.response.send_message(
-                "❌ Non hai un personaggio salvato. Usa `/crea` per crearne uno!",
+                "Non hai un personaggio salvato. Usa /crea per crearne uno!",
                 ephemeral=True
             )
             return
@@ -363,7 +363,7 @@ class CharacterCog(commands.Cog):
         
         if not gallery_channel_id:
             await interaction.response.send_message(
-                "❌ Nessuna galleria configurata. Chiedi a un admin di usare `/set-gallery`",
+                "Nessuna galleria configurata. Chiedi a un admin di usare /set-gallery",
                 ephemeral=True
             )
             return
@@ -372,12 +372,12 @@ class CharacterCog(commands.Cog):
         
         if message:
             await interaction.response.send_message(
-                f"✅ Personaggio pubblicato nella galleria! [Vai al messaggio]({message.jump_url})",
+                f"Personaggio pubblicato nella galleria! [Vai al messaggio]({message.jump_url})",
                 ephemeral=True
             )
         else:
             await interaction.response.send_message(
-                "❌ Errore nel pubblicare il personaggio.",
+                "Errore nel pubblicare il personaggio.",
                 ephemeral=True
             )
 
