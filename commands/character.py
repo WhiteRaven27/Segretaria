@@ -129,7 +129,7 @@ class EmbedEditor(discord.ui.View):
             gallery_channel_id = get_gallery_channel(interaction.guild.id)
             if gallery_channel_id and self.bot:
                 try:
-                    gallery_channel = self.bot.get_channel(gallery_channel_id)
+                    gallery_channel = self.bot.get_channel(gallery_channel_id) or await self.bot.fetch_channel(gallery_channel_id)  
                     if gallery_channel:
                         embed = create_embed(self.data)
                         embed.set_footer(text=f"Creato da {interaction.user.name}#{interaction.user.discriminator}")
