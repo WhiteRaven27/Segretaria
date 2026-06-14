@@ -9,6 +9,12 @@ class ApprovalCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def find_role_case_insensitive(self, guild, role_name):
+        return discord.utils.find(
+            lambda r: r.name.lower() == role_name.lower(),
+            guild.roles
+        )
+
     @discord.app_commands.command(
         name="approvazione",
         description="Assegna il ruolo 'Pg approvato' a un utente (solo Team approvazione)"
@@ -17,7 +23,7 @@ class ApprovalCog(commands.Cog):
         guild = interaction.guild
 
         # Check that the approver role exists in the server
-        approver_role = discord.utils.get(guild.roles, name=ROLE_APPROVER)
+        approver_role = self.find_role_case_insensitive(guild, ROLE_APPROVER)
         if approver_role is None:
             embed = discord.Embed(
                 description=f"Il ruolo **'{ROLE_APPROVER}'** non esiste nel server. Chiedi a un admin di crearlo.",
@@ -36,7 +42,7 @@ class ApprovalCog(commands.Cog):
             return
 
         # Check that the approved role exists in the server
-        approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+        approved_role = self.find_role_case_insensitive(guild, ROLE_APPROVED)
         if approved_role is None:
             embed = discord.Embed(
                 description=f"Il ruolo **'{ROLE_APPROVED}'** non esiste nel server. Chiedi a un admin di crearlo.",
@@ -67,7 +73,7 @@ class ApprovalCog(commands.Cog):
         try:
             await user.add_roles(approved_role)
             embed = discord.Embed(
-                description=f"{user.mention} ha ottenuto il ruolo **{ROLE_APPROVED}**",
+                description=f"{user.mention} ha ottenuto il ruolo **{approved_role.name}**",
                 color=discord.Color.green()
             )
             await interaction.response.send_message(embed=embed)
