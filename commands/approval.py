@@ -51,15 +51,6 @@ class ApprovalCog(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Check that the target user is in the server
-        if user not in guild.members:
-            embed = discord.Embed(
-                description=f"L'utente {user.mention} non è nel server.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
         # Check if the user already has the approved role
         if approved_role in user.roles:
             embed = discord.Embed(
