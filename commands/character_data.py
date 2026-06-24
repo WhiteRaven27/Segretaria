@@ -95,10 +95,11 @@ def load_all_characters(user_id):
             result.append(data)
         
         return result
-  except Exception as e:
-    print(e)
-    
+  except FileNotFoundError:
     return []
+  except json.JSONDecodeError as e:
+    print(f"Errore nel parsing di data/characters.json: {e}")
+    raise
 
 def save_character(user_id, data):
     """Salva il personaggio dell'utente nel file JSON"""
