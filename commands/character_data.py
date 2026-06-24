@@ -96,17 +96,21 @@ def load_all_characters(user_id):
 
         return result
 
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError as e:
+        print("load_all_characters JSON decode error:", e)
+        raise
     except Exception as e:
         print("load_all_characters error:", e)
-
-    return []
+        raise
 
 
 def save_character(user_id, data):
     try:
         with open("data/characters.json", "r") as f:
             characters = json.load(f)
-    except:
+    except FileNotFoundError:
         characters = {}
 
     user_id_str = str(user_id)
@@ -150,6 +154,8 @@ def delete_character(user_id, character_id=None):
         if character_id:
             if character_id in user_characters:
                 del user_characters[character_id]
+            else:
+                return False
         else:
             first_char_id = next(iter(user_characters))
             del user_characters[first_char_id]
