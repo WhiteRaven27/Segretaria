@@ -57,7 +57,6 @@ class EditModal(discord.ui.Modal):
             required=required,
             max_length=2000
         )
-        )
 
         self.add_item(self.input)
 
