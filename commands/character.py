@@ -73,24 +73,45 @@ class EditModal(discord.ui.Modal):
 
         await interaction.response.defer()
 
-class EmbedEditor(discord.ui.View):
-    def __init__(self, data, message=None, user_id=None, bot=None):
-        super().__init__(timeout=None)
+class EditModal(discord.ui.Modal):
+    OPTIONAL_FIELDS = {"abilita", "link", "immagine"}
+
+    def __init__(self, title, field_name, data, message, view):
+        super().__init__(title=title)
+
+        self.field_name = field_name
         self.data = data
         self.message = message
-        self.user_id = user_id
-        self.bot = bot
+        self.view_ref = view
 
-    async def open_modal(self, interaction, title, field_name):
-        modal = EditModal(
-            title=title,
-            field_name=field_name,
-            data=self.data,
-            message=self.message,
-            view=self
+        required = field_name not in self.OPTIONAL_FIELDS
+
+        self.input = discord.ui.TextInput(
+            label=title,
+            style=discord.TextStyle.paragraph,
+            required=required,
+            max_length=2000
         )
 
-        await interaction.response.send_modal(modal)
+        self.add_item(self.input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        value = self.input.value.strip()
+
+        # normalizzazione campi opzionali
+        if self.field_name in {"abilita", "link", "immagine"} and not value:
+            value = None
+
+        setattr(self.data, self.field_name, value)
+
+        save_character(interaction.user.id, self.data)
+
+        await self.message.edit(
+            embed=create_embed(self.data),
+            view=self.view_ref
+        )
+
+        await interaction.response.defer()
 
     @discord.ui.button(label="Nome", style=discord.ButtonStyle.primary)
     async def nome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
