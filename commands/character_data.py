@@ -33,7 +33,7 @@ def create_embed(data: CharacterData):
     if data.abilita:
         embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
         
-    if data.link:
+  if data.link:
     embed.add_field(name="Link Scheda", value=data.link, inline=False)
 
     if data.immagine:
@@ -95,12 +95,12 @@ def load_all_characters(user_id):
             result.append(data)
         
         return result
-    except:
-        pass
+  except Exception as e:
+    print(e)
     
     return []
 
-def _character(user_id, data):
+def save_character(user_id, data):
     """Salva il personaggio dell'utente nel file JSON"""
     try:
         with open("data/characters.json", "r") as f:
