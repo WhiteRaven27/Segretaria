@@ -34,7 +34,7 @@ def create_embed(data: CharacterData):
         embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
         
     if data.link:
-    embed.add_field(name="Link Scheda", value=data.link, inline=False)
+        embed.add_field(name="Link Scheda", value=data.link, inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)

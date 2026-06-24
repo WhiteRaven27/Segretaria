@@ -35,7 +35,7 @@ def set_gallery_channel(guild_id, channel_id):
     save_gallery_config(config)
 
 class EditModal(discord.ui.Modal):
-    def __init__(self, title, field_name, data, message, view):
+    def __init__(self, title, field_name, data, message, view, required=True):
         super().__init__(title=title)
 
         self.field_name = field_name
@@ -46,14 +46,26 @@ class EditModal(discord.ui.Modal):
         self.input = discord.ui.TextInput(
             label=title,
             style=discord.TextStyle.paragraph,
-            required=True,
+            required=required,
             max_length=2000
         )
 
         self.add_item(self.input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        setattr(self.data, self.field_name, str(self.input))
+        value = str(self.input).strip()
+
+        # Handle optional fields that can be cleared to empty/None
+        if self.field_name in ['abilita', 'link']:
+            # For abilita and link, empty string is valid
+            setattr(self.data, self.field_name, value)
+        elif self.field_name == 'immagine':
+            # For immagine, empty should be None
+            setattr(self.data, self.field_name, value if value else None)
+        else:
+            # For required fields, set the value as-is
+            setattr(self.data, self.field_name, value)
+
         save_character(interaction.user.id, self.data)
 
         await self.message.edit(
@@ -74,12 +86,17 @@ class EmbedEditor(discord.ui.View):
         self.bot = bot
 
     async def open_modal(self, interaction, title, field_name):
+        # Determine if field is required based on CharacterData contract
+        # Optional fields: abilita, link, immagine
+        is_required = field_name not in ['abilita', 'link', 'immagine']
+
         modal = EditModal(
             title=title,
             field_name=field_name,
             data=self.data,
             message=self.message,
-            view=self
+            view=self,
+            required=is_required
         )
 
         await interaction.response.send_modal(modal)
