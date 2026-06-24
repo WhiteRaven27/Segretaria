@@ -46,7 +46,7 @@ class EditModal(discord.ui.Modal):
         self.input = discord.ui.TextInput(
             label=title,
             style=discord.TextStyle.paragraph,
-            required=field_name not in ("abilita", "link"),
+            required=True,
             max_length=2000
         )
 
@@ -115,10 +115,6 @@ class EmbedEditor(discord.ui.View):
     @discord.ui.button(label="Colore", style=discord.ButtonStyle.danger)
     async def hex_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.open_modal(interaction, "Colore (#FFFFFF)", "hex_color")
-
-    @discord.ui.button(label="Link Scheda", style=discord.ButtonStyle.danger)
-    async def link_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.open_modal(interaction, "Link Scheda", "link")
 
     @discord.ui.button(label="Immagine", style=discord.ButtonStyle.danger)
     async def immagine_button(self, interaction: discord.Interaction, button: discord.ui.Button):
