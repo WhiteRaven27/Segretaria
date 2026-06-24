@@ -43,11 +43,16 @@ class EditModal(discord.ui.Modal):
         self.message = message
         self.view_ref = view
 
-        self.input = discord.ui.TextInput(
-            label=title,
-            style=discord.TextStyle.paragraph,
-            required=True,
-            max_length=2000
+    OPTIONAL_FIELDS = ["abilita", "link", "immagine"]
+
+required = field_name not in OPTIONAL_FIELDS
+
+self.input = discord.ui.TextInput(
+    label=title,
+    style=discord.TextStyle.paragraph,
+    required=required,
+    max_length=2000
+)
         )
 
         self.add_item(self.input)
