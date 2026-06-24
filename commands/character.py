@@ -46,7 +46,7 @@ class EditModal(discord.ui.Modal):
         self.input = discord.ui.TextInput(
             label=title,
             style=discord.TextStyle.paragraph,
-            required=True,
+            required=required,
             max_length=2000
         )
 
