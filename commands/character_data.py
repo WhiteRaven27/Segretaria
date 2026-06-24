@@ -12,6 +12,7 @@ class CharacterData:
         self.descrizione = "Non impostata"
         self.classe = "Non impostata"
         self.abilita = ""  # Ora opzionale
+        self.link = ""  # opzionale
         self.immagine = None
         self.hex_color = "#5865F2"
 
@@ -31,6 +32,9 @@ def create_embed(data: CharacterData):
     # Mostra Abilità solo se non vuota
     if data.abilita:
         embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
+        
+    if data.link:
+    embed.add_field(name="Link Scheda", value=data.link, inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
@@ -96,7 +100,7 @@ def load_all_characters(user_id):
     
     return []
 
-def save_character(user_id, data):
+def _character(user_id, data):
     """Salva il personaggio dell'utente nel file JSON"""
     try:
         with open("data/characters.json", "r") as f:
@@ -117,6 +121,7 @@ def save_character(user_id, data):
         "descrizione": data.descrizione,
         "classe": data.classe,
         "abilita": data.abilita,
+        "link": data.link,
         "immagine": data.immagine,
         "hex_color": data.hex_color
     }
