@@ -91,7 +91,9 @@ class EditModal(discord.ui.Modal):
             )
 
         setattr(self.data, self.field, value)
-        save_character(self.data.character_id, self.data)
+
+        # FIX IMPORTANTE
+        save_character(interaction.user.id, self.data)
 
         await self.message.edit(embed=create_embed(self.data), view=self.view)
         await interaction.response.defer()
@@ -142,14 +144,15 @@ class EmbedEditor(discord.ui.View):
     async def link(self, i, b): await self.open(i, "Link", "link")
 
     @discord.ui.button(label="Immagine", style=discord.ButtonStyle.danger)
-    async def img(self, i, b): await self.open(i, "Immagine", "immagine")
+    async def immagine(self, i, b): await self.open(i, "Immagine", "immagine")
 
-    @discord.ui.button(label="Salva", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="Salva", style=discord.ButtonStyle.success)
     async def salva(self, i, b):
 
-        save_character(self.data.character_id, self.data)
+        # FIX IMPORTANTE
+        save_character(self.user_id, self.data)
 
-        await i.response.send_message("Salvato!", ephemeral=True)
+        await i.response.send_message("Salvato", ephemeral=True)
 
         async def post():
             if not i.guild:
@@ -165,34 +168,7 @@ class EmbedEditor(discord.ui.View):
 
 
 # =========================
-# SHOW CONFIRM (FIX QUI)
-# =========================
-
-class ShowConfirm(discord.ui.View):
-    def __init__(self, user, embed):
-        super().__init__(timeout=60)
-        self.user = user
-        self.embed = embed
-
-    @discord.ui.button(label="SI", style=discord.ButtonStyle.success)
-    async def si(self, i, b):
-        if i.user != self.user:
-            return
-
-        await i.channel.send(
-            content=f"Scheda di {i.user.mention}",
-            embed=self.embed
-        )
-
-        await i.response.edit_message(content="Pubblicato", view=None)
-
-    @discord.ui.button(label="NO", style=discord.ButtonStyle.danger)
-    async def no(self, i, b):
-        await i.response.edit_message(content="Annullato", view=None)
-
-
-# =========================
-# SELECT VIEW
+# SELECT
 # =========================
 
 class SelectCharacter(discord.ui.View):
@@ -214,7 +190,7 @@ class SelectCharacter(discord.ui.View):
 
     async def on(self, i):
         if i.user != self.user:
-            return await i.response.send_message("No.", ephemeral=True)
+            return await i.response.send_message("No", ephemeral=True)
         await self.callback(i, self.select.values[0])
 
 
@@ -232,11 +208,37 @@ class ConfirmDelete(discord.ui.View):
     async def si(self, i, b):
         if i.user != self.user:
             return
-
         delete_character(i.user.id, self.cid)
         await i.response.edit_message(content="Eliminato", view=None)
 
     @discord.ui.button(label="NO", style=discord.ButtonStyle.secondary)
+    async def no(self, i, b):
+        await i.response.edit_message(content="Annullato", view=None)
+
+
+# =========================
+# SHOW CONFIRM
+# =========================
+
+class ShowConfirm(discord.ui.View):
+    def __init__(self, user, embed):
+        super().__init__(timeout=60)
+        self.user = user
+        self.embed = embed
+
+    @discord.ui.button(label="SI", style=discord.ButtonStyle.success)
+    async def si(self, i, b):
+        if i.user != self.user:
+            return
+
+        await i.channel.send(
+            content=f"Scheda di {self.user.mention}",
+            embed=self.embed
+        )
+
+        await i.response.edit_message(content="Pubblicato", view=None)
+
+    @discord.ui.button(label="NO", style=discord.ButtonStyle.danger)
     async def no(self, i, b):
         await i.response.edit_message(content="Annullato", view=None)
 
@@ -266,12 +268,12 @@ class CharacterCog(commands.Cog):
     async def mostra(self, i):
         chars = load_all_characters(i.user.id)
         if not chars:
-            return await i.response.send_message("Nessun pg", ephemeral=True)
+            return await i.response.send_message("Nessun personaggio", ephemeral=True)
 
         async def h(inter, cid):
             d = load_character(i.user.id, cid)
             await inter.response.send_message(
-                "Vuoi mostrare questo personaggio?",
+                "Vuoi mostrare questa scheda?",
                 embed=create_embed(d),
                 view=ShowConfirm(i.user, create_embed(d)),
                 ephemeral=True
@@ -281,7 +283,7 @@ class CharacterCog(commands.Cog):
             await h(i, chars[0].character_id)
         else:
             await i.response.send_message(
-                "Seleziona",
+                "Seleziona personaggio",
                 view=SelectCharacter(i.user, chars, h),
                 ephemeral=True
             )
@@ -290,7 +292,7 @@ class CharacterCog(commands.Cog):
     async def modifica(self, i):
         chars = load_all_characters(i.user.id)
         if not chars:
-            return await i.response.send_message("Nessun pg", ephemeral=True)
+            return await i.response.send_message("Nessun personaggio", ephemeral=True)
 
         async def h(inter, cid):
             d = load_character(i.user.id, cid)
@@ -304,7 +306,7 @@ class CharacterCog(commands.Cog):
             await h(i, chars[0].character_id)
         else:
             await i.response.send_message(
-                "Seleziona",
+                "Seleziona personaggio",
                 view=SelectCharacter(i.user, chars, h),
                 ephemeral=True
             )
@@ -313,11 +315,11 @@ class CharacterCog(commands.Cog):
     async def elimina(self, i):
         chars = load_all_characters(i.user.id)
         if not chars:
-            return await i.response.send_message("Nessun pg", ephemeral=True)
+            return await i.response.send_message("Nessun personaggio", ephemeral=True)
 
         async def h(inter, cid):
             d = load_character(i.user.id, cid)
-            await inter.response.send_message(
+            await i.response.send_message(
                 embed=discord.Embed(
                     title="Eliminare?",
                     description=d.nome,
@@ -331,7 +333,7 @@ class CharacterCog(commands.Cog):
             await h(i, chars[0].character_id)
         else:
             await i.response.send_message(
-                "Seleziona",
+                "Seleziona personaggio",
                 view=SelectCharacter(i.user, chars, h),
                 ephemeral=True
             )
