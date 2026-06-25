@@ -41,7 +41,7 @@ def create_embed(data: CharacterData):
     if data.immagine:
         embed.set_image(url=data.immagine)
 
-    embed.set_footer(text=f"Messaggio mandato da {interaction.user}")
+    embed.set_footer(text=f"Messaggio offerto da Vanguard Express")
 
     return embed
 
