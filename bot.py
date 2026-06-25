@@ -1,44 +1,105 @@
 import os
+import json
 import asyncio
+import logging
+import traceback
+
 from dotenv import load_dotenv
-
-# Load environment variables from .env file (if it exists)
-load_dotenv()
-
-TOKEN = os.getenv("TOKEN")
-
-# Make sure data directory exists
-if not os.path.exists("data"):
-    os.makedirs("data")
-
-if not os.path.exists("data/characters.json"):
-    import json
-    with open("data/characters.json", "w") as f:
-        json.dump({}, f)
-
 import discord
 from discord.ext import commands
 
-intents = discord.Intents.default()
-intents.message_content = True  # Enable message content intent
-bot = commands.Bot(command_prefix="!", intents=intents)
+# =========================
+# CONFIG
+# =========================
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+
+TOKEN = os.getenv("TOKEN")
 
 # =========================
-# CARICAMENTO COGS
+# DATA FILES
+# =========================
+
+os.makedirs("data", exist_ok=True)
+
+if not os.path.exists("data/characters.json"):
+    with open("data/characters.json", "w", encoding="utf-8") as f:
+        json.dump({}, f)
+
+# =========================
+# BOT
+# =========================
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
+
+# =========================
+# ERROR HANDLING
+# =========================
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    print(f"\n❌ ERRORE EVENTO: {event}")
+    print(traceback.format_exc())
+
+
+@bot.tree.error
+async def on_app_command_error(
+    interaction: discord.Interaction,
+    error
+):
+    print("\n❌ ERRORE SLASH COMMAND")
+    print(error)
+    print(traceback.format_exc())
+
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"Errore: {error}",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"Errore: {error}",
+                ephemeral=True
+            )
+    except Exception:
+        pass
+
+# =========================
+# COG LOADER
 # =========================
 
 async def load_cogs():
-    """Carica tutti i cog dalla cartella commands"""
     for filename in os.listdir("./commands"):
-        if filename.endswith(".py") and filename != "__init__.py" and filename != "character_data.py":
+
+        if (
+            filename.endswith(".py")
+            and filename != "__init__.py"
+            and filename != "character_data.py"
+        ):
             try:
-                await bot.load_extension(f"commands.{filename[:-3]}")
+                await bot.load_extension(
+                    f"commands.{filename[:-3]}"
+                )
+
                 print(f"✅ Caricato cog: {filename}")
+
             except Exception as e:
-                print(f"❌ Errore nel caricamento di {filename}: {e}")
+                print(
+                    f"❌ Errore nel caricamento di {filename}:"
+                )
+                traceback.print_exc()
 
 # =========================
-# AVVIO BOT
+# READY
 # =========================
 
 @bot.event
@@ -46,15 +107,35 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         print(f"Slash commands sincronizzati: {len(synced)}")
+
+        # 👇 AGGIUNGI QUESTO
+        for cmd in bot.tree.get_commands():
+            print(f"COMANDO: {cmd.name}")
+
     except Exception as e:
         print(e)
 
     print(f"Connesso come {bot.user}")
+    
+# =========================
+# MAIN
+# =========================
 
 async def main():
+
+    if not TOKEN:
+        print(
+            "❌ TOKEN non trovato nel file .env"
+        )
+        return
+
     async with bot:
         await load_cogs()
         await bot.start(TOKEN)
+
+# =========================
+# START
+# =========================
 
 if __name__ == "__main__":
     asyncio.run(main())
