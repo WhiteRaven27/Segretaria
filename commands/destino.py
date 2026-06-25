@@ -36,7 +36,10 @@ class DestinoCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @discord.app_commands.command(name="destino")
+    @discord.app_commands.command(
+        name="destino",
+        description="Gestisce una sessione di estrazione narrativa"
+    )
     async def destino(
         self,
         interaction: discord.Interaction,
@@ -55,6 +58,7 @@ class DestinoCog(commands.Cog):
         # RESET
         if reset:
             sessions[cid] = {"pool": [], "result": [], "message": None}
+
             return await interaction.response.send_message(
                 "Destino resettato.",
                 ephemeral=True
@@ -65,7 +69,7 @@ class DestinoCog(commands.Cog):
             names = [n.strip() for n in add.replace(",", " ").split() if n.strip()]
             session["pool"].extend(names)
 
-        # DRAW + END
+        # DRAW + END SESSION
         if draw:
             if draw > len(session["pool"]):
                 return await interaction.response.send_message(
@@ -83,7 +87,7 @@ class DestinoCog(commands.Cog):
             sessions.pop(cid, None)
             return
 
-        # LIVE UPDATE EMBED
+        # LIVE UPDATE
         embed = build_embed(cid)
 
         if session["message"] is None:
