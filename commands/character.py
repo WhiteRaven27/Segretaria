@@ -92,7 +92,6 @@ class EditModal(discord.ui.Modal):
 
         setattr(self.data, self.field, value)
 
-        # FIX IMPORTANTE
         save_character(interaction.user.id, self.data)
 
         await self.message.edit(embed=create_embed(self.data), view=self.view)
@@ -146,10 +145,12 @@ class EmbedEditor(discord.ui.View):
     @discord.ui.button(label="Immagine", style=discord.ButtonStyle.danger)
     async def immagine(self, i, b): await self.open(i, "Immagine", "immagine")
 
-    @discord.ui.button(label="Salva", style=discord.ButtonStyle.success)
+    @discord.ui.button(
+        label="Salva",
+        style=discord.ButtonStyle.success
+    )
     async def salva(self, i, b):
 
-        # FIX IMPORTANTE
         save_character(self.user_id, self.data)
 
         await i.response.send_message("Salvato", ephemeral=True)
@@ -157,9 +158,11 @@ class EmbedEditor(discord.ui.View):
         async def post():
             if not i.guild:
                 return
+
             cid = get_gallery_channel(i.guild.id)
             if not cid:
                 return
+
             ch = self.bot.get_channel(cid)
             if ch:
                 await ch.send(embed=create_embed(self.data))
@@ -251,12 +254,18 @@ class CharacterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @discord.app_commands.command(name="set-gallery")
+    @discord.app_commands.command(
+        name="set-gallery",
+        description="Imposta il canale per pubblicare le schede"
+    )
     async def set_gallery(self, i, channel: discord.TextChannel):
         set_gallery_channel(i.guild.id, channel.id)
         await i.response.send_message("OK", ephemeral=True)
 
-    @discord.app_commands.command(name="crea")
+    @discord.app_commands.command(
+        name="crea",
+        description="Crea una nuova scheda personaggio"
+    )
     async def crea(self, i):
         d = CharacterData()
         v = EmbedEditor(d, user_id=i.user.id, bot=self.bot)
@@ -264,9 +273,13 @@ class CharacterCog(commands.Cog):
         await i.response.send_message(embed=create_embed(d), view=v, ephemeral=True)
         v.message = await i.original_response()
 
-    @discord.app_commands.command(name="mostra")
+    @discord.app_commands.command(
+        name="mostra",
+        description="Mostra una tua scheda e la pubblica"
+    )
     async def mostra(self, i):
         chars = load_all_characters(i.user.id)
+
         if not chars:
             return await i.response.send_message("Nessun personaggio", ephemeral=True)
 
@@ -288,9 +301,13 @@ class CharacterCog(commands.Cog):
                 ephemeral=True
             )
 
-    @discord.app_commands.command(name="modifica")
+    @discord.app_commands.command(
+        name="modifica",
+        description="Modifica una scheda esistente"
+    )
     async def modifica(self, i):
         chars = load_all_characters(i.user.id)
+
         if not chars:
             return await i.response.send_message("Nessun personaggio", ephemeral=True)
 
@@ -311,9 +328,13 @@ class CharacterCog(commands.Cog):
                 ephemeral=True
             )
 
-    @discord.app_commands.command(name="elimina")
+    @discord.app_commands.command(
+        name="elimina",
+        description="Elimina una scheda personaggio"
+    )
     async def elimina(self, i):
         chars = load_all_characters(i.user.id)
+
         if not chars:
             return await i.response.send_message("Nessun personaggio", ephemeral=True)
 
