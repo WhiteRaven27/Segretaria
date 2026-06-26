@@ -10,7 +10,8 @@ def build_embed(cid):
     data = sessions.get(cid, {"pool": [], "result": []})
 
     embed = discord.Embed(
-        title="Destino",
+        title="🎴 Destino",
+        description="Il mazzo è stato mescolato... il fato osserva in silenzio.",
         color=discord.Color.dark_purple()
     )
 
@@ -36,7 +37,10 @@ class DestinoCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @discord.app_commands.command(name="destino")
+    @discord.app_commands.command(
+        name="destino",
+        description="Pesca una carta dal tuo destino, come in un duello leggendario."
+    )
     async def destino(
         self,
         interaction: discord.Interaction,
@@ -44,7 +48,6 @@ class DestinoCog(commands.Cog):
         draw: int = None,
         reset: bool = False
     ):
-        # evita "sta pensando..."
         await interaction.response.defer()
 
         cid = interaction.channel.id
@@ -58,20 +61,22 @@ class DestinoCog(commands.Cog):
 
         session = sessions[cid]
 
+        # =====================
         # RESET
+        # =====================
         if reset:
             sessions[cid] = {
                 "pool": [],
                 "result": [],
                 "message": None
             }
-            await interaction.followup.send("Destino resettato.")
+            await interaction.followup.send("🎴 Destino resettato.")
             return
 
-        # ADD MULTIPLO
+        # =====================
+        # ADD
+        # =====================
         if add:
-            # supporta: "nome1 nome2 nome3"
-            # oppure: "nome1, nome2, nome3"
             names = [
                 n.strip()
                 for n in add.replace(",", " ").split()
@@ -79,11 +84,13 @@ class DestinoCog(commands.Cog):
             ]
             session["pool"].extend(names)
 
+        # =====================
         # DRAW
+        # =====================
         if draw:
             if draw > len(session["pool"]):
                 await interaction.followup.send(
-                    "Non ci sono abbastanza partecipanti nel destino.",
+                    "Non ci sono abbastanza partecipanti nel mazzo del destino.",
                     ephemeral=True
                 )
                 return
@@ -95,11 +102,13 @@ class DestinoCog(commands.Cog):
 
             await interaction.followup.send(embed=embed)
 
-            # fine sessione
+            # chiude sessione
             sessions.pop(cid, None)
             return
 
-        # EMBED LIVE UPDATE
+        # =====================
+        # UPDATE EMBED
+        # =====================
         embed = build_embed(cid)
 
         if session["message"] is None:

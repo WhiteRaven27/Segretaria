@@ -1,6 +1,47 @@
 import json
 import discord
 import uuid
+import os
+
+DATA_PATH = "data/characters.json"
+
+
+# =========================
+# FILE SAFETY
+# =========================
+
+def ensure_file():
+    """Crea cartella e file se non esistono"""
+    os.makedirs("data", exist_ok=True)
+
+    if not os.path.exists(DATA_PATH):
+        with open(DATA_PATH, "w") as f:
+            json.dump({}, f)
+
+
+def read_all():
+    ensure_file()
+
+    try:
+        with open(DATA_PATH, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        # file corrotto → reset sicuro
+        return {}
+    except FileNotFoundError:
+        ensure_file()
+        return {}
+
+
+def write_all(data):
+    ensure_file()
+    with open(DATA_PATH, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+# =========================
+# DATA MODEL
+# =========================
 
 class CharacterData:
     def __init__(self, character_id=None):
@@ -9,13 +50,17 @@ class CharacterData:
         self.identita = "Non impostata"
         self.origine = "Non impostata"
         self.tema = "Non impostato"
-        self.descrizione = "Non impostata"
-        self.classe = "Non impostata"
-        self.abilita = ""
+        self.descrizione = "Non impostato"
+        self.classe = "Non impostato"
+        self.abilita = ""   # EROICHE
         self.link = ""
         self.immagine = None
         self.hex_color = "#5865F2"
 
+
+# =========================
+# EMBED
+# =========================
 
 def create_embed(data: CharacterData):
     embed = discord.Embed(
@@ -24,148 +69,135 @@ def create_embed(data: CharacterData):
         color=discord.Color.from_str(data.hex_color)
     )
 
-    embed.add_field(name="Identita", value=data.identita, inline=True)
+    embed.add_field(name="Identità", value=data.identita, inline=True)
     embed.add_field(name="Origine", value=data.origine, inline=True)
     embed.add_field(name="Tema", value=data.tema, inline=True)
     embed.add_field(name="Classe", value=data.classe, inline=True)
 
-    # Abilità opzionale
     if data.abilita:
-        embed.add_field(name="Abilita Eroiche", value=data.abilita, inline=False)
+        embed.add_field(name="Eroiche", value=data.abilita, inline=False)
 
-    # LINK FIX INDENTAZIONE
     if data.link:
         embed.add_field(name="Link Scheda", value=data.link, inline=False)
 
-    # Immagine opzionale
     if data.immagine:
         embed.set_image(url=data.immagine)
 
-    embed.set_footer(text=f"Messaggio offerto da Vanguard Express")
+    embed.set_footer(text="Messaggio offerto da Vanguard Express")
 
     return embed
 
 
+# =========================
+# LOAD SINGLE
+# =========================
+
 def load_character(user_id, character_id=None):
-    try:
-        with open("data/characters.json", "r") as f:
-            characters = json.load(f)
+    data = read_all()
+    user_chars = data.get(str(user_id), {})
 
-        user_characters = characters.get(str(user_id), {})
+    if not user_chars:
+        return None
 
-        if not user_characters:
+    if character_id:
+        raw = user_chars.get(character_id)
+        if not raw:
             return None
+        return _to_obj(character_id, raw)
 
-        if character_id:
-            if character_id in user_characters:
-                data_dict = user_characters[character_id]
-                data = CharacterData(character_id=character_id)
-                for key, value in data_dict.items():
-                    if key != "character_id":
-                        setattr(data, key, value)
-                return data
-        else:
-            first_char_id = next(iter(user_characters))
-            data_dict = user_characters[first_char_id]
-            data = CharacterData(character_id=first_char_id)
-            for key, value in data_dict.items():
-                if key != "character_id":
-                    setattr(data, key, value)
-            return data
+    first_id = next(iter(user_chars))
+    return _to_obj(first_id, user_chars[first_id])
 
-    except Exception as e:
-        print("load_character error:", e)
 
-    return None
-
+# =========================
+# LOAD ALL
+# =========================
 
 def load_all_characters(user_id):
-    try:
-        with open("data/characters.json", "r") as f:
-            characters = json.load(f)
+    data = read_all()
+    user_chars = data.get(str(user_id), {})
 
-        user_characters = characters.get(str(user_id), {})
-        result = []
-
-        for char_id, data_dict in user_characters.items():
-            data = CharacterData(character_id=char_id)
-            for key, value in data_dict.items():
-                if key != "character_id":
-                    setattr(data, key, value)
-            result.append(data)
-
-        return result
-
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError as e:
-        print("load_all_characters JSON decode error:", e)
-        raise
-    except Exception as e:
-        print("load_all_characters error:", e)
-        raise
+    return [
+        _to_obj(cid, raw)
+        for cid, raw in user_chars.items()
+    ]
 
 
-def save_character(user_id, data):
-    try:
-        with open("data/characters.json", "r") as f:
-            characters = json.load(f)
-    except FileNotFoundError:
-        characters = {}
+# =========================
+# SAVE
+# =========================
 
-    user_id_str = str(user_id)
+def save_character(user_id, data_obj):
+    all_data = read_all()
+    uid = str(user_id)
 
-    if user_id_str not in characters:
-        characters[user_id_str] = {}
+    if uid not in all_data:
+        all_data[uid] = {}
 
-    characters[user_id_str][data.character_id] = {
-        "character_id": data.character_id,
-        "nome": data.nome,
-        "identita": data.identita,
-        "origine": data.origine,
-        "tema": data.tema,
-        "descrizione": data.descrizione,
-        "classe": data.classe,
-        "abilita": data.abilita,
-        "link": data.link,
-        "immagine": data.immagine,
-        "hex_color": data.hex_color
+    all_data[uid][data_obj.character_id] = {
+        "character_id": data_obj.character_id,
+        "nome": data_obj.nome,
+        "identita": data_obj.identita,
+        "origine": data_obj.origine,
+        "tema": data_obj.tema,
+        "descrizione": data_obj.descrizione,
+        "classe": data_obj.classe,
+        "abilita": data_obj.abilita,
+        "link": data_obj.link,
+        "immagine": data_obj.immagine,
+        "hex_color": data_obj.hex_color
     }
 
-    with open("data/characters.json", "w") as f:
-        json.dump(characters, f, indent=4)
+    write_all(all_data)
 
+
+# =========================
+# DELETE (FIXED)
+# =========================
 
 def delete_character(user_id, character_id=None):
-    try:
-        with open("data/characters.json", "r") as f:
-            characters = json.load(f)
+    """
+    FIX IMPORTANTE:
+    - ora ritorna False se NON elimina davvero nulla
+    - evita falsi positivi (bug precedente)
+    """
 
-        user_id_str = str(user_id)
+    all_data = read_all()
+    uid = str(user_id)
 
-        if user_id_str not in characters:
+    if uid not in all_data:
+        return False
+
+    if not all_data[uid]:
+        return False
+
+    user_chars = all_data[uid]
+
+    if character_id:
+        if character_id not in user_chars:
             return False
+        del user_chars[character_id]
+    else:
+        first = next(iter(user_chars))
+        del user_chars[first]
 
-        user_characters = characters[user_id_str]
+    # pulizia utente se vuoto
+    if not user_chars:
+        del all_data[uid]
 
-        if not user_characters:
-            return False
+    write_all(all_data)
+    return True
 
-        if character_id:
-            if character_id in user_characters:
-                del user_characters[character_id]
-            else:
-                return False
-        else:
-            first_char_id = next(iter(user_characters))
-            del user_characters[first_char_id]
 
-        with open("data/characters.json", "w") as f:
-            json.dump(characters, f, indent=4)
+# =========================
+# INTERNAL
+# =========================
 
-        return True
+def _to_obj(cid, data_dict):
+    obj = CharacterData(character_id=cid)
 
-    except Exception as e:
-        print("delete_character error:", e)
+    for k, v in data_dict.items():
+        if k != "character_id":
+            setattr(obj, k, v)
 
-    return False
+    return obj
