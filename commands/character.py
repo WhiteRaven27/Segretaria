@@ -3,6 +3,7 @@ from discord.ext import commands
 import json
 import os
 import asyncio
+import re
 
 from .character_data import (
     CharacterData,
@@ -45,7 +46,26 @@ def set_gallery_channel(guild_id, channel_id):
     config[str(guild_id)] = channel_id
     save_gallery_config(config)
 
+# =========================
+# Hex modifica
+# =========================
 
+HEX_REGEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def normalize_hex(value: str | None):
+    if not value:
+        return None
+
+    value = value.strip()
+
+    if not HEX_REGEX.match(value):
+        return None
+
+    if len(value) == 4:
+        value = "#" + "".join([c * 2 for c in value[1:]])
+
+    return value.upper()
 # =========================
 # EDIT MODAL
 # =========================
@@ -73,7 +93,9 @@ class EditModal(discord.ui.Modal):
         value = self.input.value.strip()
 
         if self.field == "hex_color":
-            if value and not (value.startswith("#") and len(value) in (4, 7)):
+            value = normalize_hex(value)
+
+            if value is None:
                 return await interaction.response.send_message(
                     "Colore non valido (#FFF o #FFFFFF)",
                     ephemeral=True

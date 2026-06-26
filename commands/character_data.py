@@ -6,14 +6,8 @@ import os
 DATA_PATH = "data/characters.json"
 
 
-# =========================
-# FILE SAFETY
-# =========================
-
 def ensure_file():
-    """Crea cartella e file se non esistono"""
     os.makedirs("data", exist_ok=True)
-
     if not os.path.exists(DATA_PATH):
         with open(DATA_PATH, "w") as f:
             json.dump({}, f)
@@ -21,15 +15,10 @@ def ensure_file():
 
 def read_all():
     ensure_file()
-
     try:
         with open(DATA_PATH, "r") as f:
             return json.load(f)
     except json.JSONDecodeError:
-        # file corrotto → reset sicuro
-        return {}
-    except FileNotFoundError:
-        ensure_file()
         return {}
 
 
@@ -39,10 +28,6 @@ def write_all(data):
         json.dump(data, f, indent=4)
 
 
-# =========================
-# DATA MODEL
-# =========================
-
 class CharacterData:
     def __init__(self, character_id=None):
         self.character_id = character_id or str(uuid.uuid4())[:8]
@@ -50,23 +35,24 @@ class CharacterData:
         self.identita = "Non impostata"
         self.origine = "Non impostata"
         self.tema = "Non impostato"
-        self.descrizione = "Non impostato"
-        self.classe = "Non impostato"
-        self.abilita = ""   # EROICHE
+        self.descrizione = "Non impostata"
+        self.classe = "Non impostata"
+        self.abilita = ""  # EROICHE
         self.link = ""
         self.immagine = None
         self.hex_color = "#5865F2"
 
 
-# =========================
-# EMBED
-# =========================
-
 def create_embed(data: CharacterData):
+    try:
+        color = discord.Color.from_str(data.hex_color)
+    except:
+        color = discord.Color.blurple()
+
     embed = discord.Embed(
         title=data.nome,
         description=data.descrizione,
-        color=discord.Color.from_str(data.hex_color)
+        color=color
     )
 
     embed.add_field(name="Identità", value=data.identita, inline=True)
@@ -84,13 +70,8 @@ def create_embed(data: CharacterData):
         embed.set_image(url=data.immagine)
 
     embed.set_footer(text="Messaggio offerto da Vanguard Express")
-
     return embed
 
-
-# =========================
-# LOAD SINGLE
-# =========================
 
 def load_character(user_id, character_id=None):
     data = read_all()
@@ -109,10 +90,6 @@ def load_character(user_id, character_id=None):
     return _to_obj(first_id, user_chars[first_id])
 
 
-# =========================
-# LOAD ALL
-# =========================
-
 def load_all_characters(user_id):
     data = read_all()
     user_chars = data.get(str(user_id), {})
@@ -123,81 +100,58 @@ def load_all_characters(user_id):
     ]
 
 
-# =========================
-# SAVE
-# =========================
+def save_character(user_id, obj):
+    data = read_all()
 
-def save_character(user_id, data_obj):
-    all_data = read_all()
     uid = str(user_id)
+    if uid not in data:
+        data[uid] = {}
 
-    if uid not in all_data:
-        all_data[uid] = {}
-
-    all_data[uid][data_obj.character_id] = {
-        "character_id": data_obj.character_id,
-        "nome": data_obj.nome,
-        "identita": data_obj.identita,
-        "origine": data_obj.origine,
-        "tema": data_obj.tema,
-        "descrizione": data_obj.descrizione,
-        "classe": data_obj.classe,
-        "abilita": data_obj.abilita,
-        "link": data_obj.link,
-        "immagine": data_obj.immagine,
-        "hex_color": data_obj.hex_color
+    data[uid][obj.character_id] = {
+        "character_id": obj.character_id,
+        "nome": obj.nome,
+        "identita": obj.identita,
+        "origine": obj.origine,
+        "tema": obj.tema,
+        "descrizione": obj.descrizione,
+        "classe": obj.classe,
+        "abilita": obj.abilita,
+        "link": obj.link,
+        "immagine": obj.immagine,
+        "hex_color": obj.hex_color
     }
 
-    write_all(all_data)
+    write_all(data)
 
-
-# =========================
-# DELETE (FIXED)
-# =========================
 
 def delete_character(user_id, character_id=None):
-    """
-    FIX IMPORTANTE:
-    - ora ritorna False se NON elimina davvero nulla
-    - evita falsi positivi (bug precedente)
-    """
-
-    all_data = read_all()
+    data = read_all()
     uid = str(user_id)
 
-    if uid not in all_data:
+    if uid not in data:
         return False
 
-    if not all_data[uid]:
+    if not data[uid]:
         return False
-
-    user_chars = all_data[uid]
 
     if character_id:
-        if character_id not in user_chars:
+        if character_id not in data[uid]:
             return False
-        del user_chars[character_id]
+        del data[uid][character_id]
     else:
-        first = next(iter(user_chars))
-        del user_chars[first]
+        first = next(iter(data[uid]))
+        del data[uid][first]
 
-    # pulizia utente se vuoto
-    if not user_chars:
-        del all_data[uid]
+    if not data[uid]:
+        del data[uid]
 
-    write_all(all_data)
+    write_all(data)
     return True
 
 
-# =========================
-# INTERNAL
-# =========================
-
-def _to_obj(cid, data_dict):
+def _to_obj(cid, d):
     obj = CharacterData(character_id=cid)
-
-    for k, v in data_dict.items():
+    for k, v in d.items():
         if k != "character_id":
             setattr(obj, k, v)
-
     return obj
