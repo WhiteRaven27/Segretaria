@@ -11,7 +11,8 @@ from .character_data import (
     load_character,
     load_all_characters,
     save_character,
-    delete_character
+    delete_character,
+    validate_character_id
 )
 
 # =========================
@@ -135,7 +136,20 @@ class EditModal(discord.ui.Modal):
 
         setattr(self.data, self.field, value)
 
-        save_character(interaction.user.id, self.data)
+        # Use async save_character with race condition protection
+        try:
+            await save_character(interaction.user.id, self.data)
+        except ValueError as e:
+            return await interaction.response.send_message(
+                f"Errore: {str(e)}",
+                ephemeral=True
+            )
+        except Exception as e:
+            print(f"❌ Errore nel salvataggio: {e}")
+            return await interaction.response.send_message(
+                "Errore nel salvataggio della scheda.",
+                ephemeral=True
+            )
 
         await self.message.edit(embed=create_embed(self.data), view=self.view)
         await interaction.response.defer()
@@ -200,9 +214,20 @@ class EmbedEditor(discord.ui.View):
 
     @discord.ui.button(label="Salva", style=discord.ButtonStyle.success)
     async def salva(self, i, b):
-        save_character(self.user_id, self.data)
-
-        await i.response.send_message("Scheda salvata.", ephemeral=True)
+        # Use async save_character with race condition protection
+        try:
+            await save_character(self.user_id, self.data)
+            await i.response.send_message("Scheda salvata.", ephemeral=True)
+        except ValueError as e:
+            await i.response.send_message(f"Errore: {str(e)}", ephemeral=True)
+            return
+        except Exception as e:
+            print(f"❌ Errore nel salvataggio: {e}")
+            await i.response.send_message(
+                "Errore nel salvataggio della scheda.",
+                ephemeral=True
+            )
+            return
 
         async def post():
             if not i.guild:
@@ -232,6 +257,14 @@ class ConfirmDelete(discord.ui.View):
     @discord.ui.button(label="SI", style=discord.ButtonStyle.danger)
     async def si(self, i, b):
         if i.user != self.user:
+            return
+
+        # Validate character ID before deletion
+        if not validate_character_id(self.cid):
+            await i.response.edit_message(
+                content="ID personaggio non valido.",
+                view=None
+            )
             return
 
         delete_character(i.user.id, self.cid)
