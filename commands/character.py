@@ -158,7 +158,8 @@ class EditModal(discord.ui.Modal):
                     ephemeral=True
                 )
 
-            await self.message.edit(embed=create_embed(self.data), view=self.view)
+            if self.message:
+                await self.message.edit(embed=create_embed(self.data), view=self.view)
             await interaction.response.defer()
         except Exception as e:
             print(f"❌ Errore nel modal: {e}")
@@ -389,11 +390,14 @@ class CharacterCog(commands.Cog):
                 ephemeral=True
             )
         
+        v = EmbedEditor(d, user_id=i.user.id, bot=self.bot)
+        
         await i.response.send_message(
             embed=create_embed(d),
-            view=EmbedEditor(d, user_id=i.user.id, bot=self.bot),
+            view=v,
             ephemeral=True
         )
+        v.message = await i.original_response()
 
     @discord.app_commands.command(
         name="elimina",
