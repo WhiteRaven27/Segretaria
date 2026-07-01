@@ -406,7 +406,7 @@ class CharacterCog(commands.Cog):
                 description=d.nome,
                 color=discord.Color.red()
             ),
-            view=ConfirmDelete(i.user, personaggio),
+            view=ConfirmDelete(i.user, d.character_id),
             ephemeral=True
         )
 
