@@ -66,6 +66,27 @@ def normalize_hex(value: str | None):
         value = "#" + "".join([c * 2 for c in value[1:]])
 
     return value.upper()
+
+# =========================
+# CHARACTER AUTOCOMPLETE
+# =========================
+
+async def character_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[discord.app_commands.Choice[str]]:
+    """Autocomplete for character names"""
+    chars = load_all_characters(interaction.user.id)
+    
+    # Filter characters by what the user typed
+    matches = [c for c in chars if c.nome.lower().startswith(current.lower())]
+    
+    # Return as Discord choices (max 25)
+    return [
+        discord.app_commands.Choice(name=c.nome, value=c.character_id)
+        for c in matches[:25]
+    ]
+
 # =========================
 # EDIT MODAL
 # =========================
@@ -199,34 +220,6 @@ class EmbedEditor(discord.ui.View):
 
 
 # =========================
-# SELECT
-# =========================
-
-class SelectCharacter(discord.ui.View):
-    def __init__(self, user, chars, callback):
-        super().__init__(timeout=60)
-        self.user = user
-        self.callback = callback
-
-        self.select = discord.ui.Select(
-            placeholder="Seleziona personaggio",
-            options=[
-                discord.SelectOption(label=c.nome[:100], value=c.character_id)
-                for c in chars
-            ]
-        )
-
-        self.select.callback = self.on
-        self.add_item(self.select)
-
-    async def on(self, i):
-        if i.user != self.user:
-            return await i.response.send_message("Non autorizzato.", ephemeral=True)
-
-        await self.callback(i, self.select.values[0])
-
-
-# =========================
 # CONFIRM DELETE
 # =========================
 
@@ -254,20 +247,24 @@ class ConfirmDelete(discord.ui.View):
 # =========================
 
 class ShowConfirm(discord.ui.View):
-    def __init__(self, user, embed):
+    def __init__(self, user, embed, bot):
         super().__init__(timeout=60)
         self.user = user
         self.embed = embed
+        self.bot = bot
 
     @discord.ui.button(label="SI", style=discord.ButtonStyle.success)
     async def si(self, i, b):
         if i.user != self.user:
             return
 
-        await i.channel.send(
+        msg = await i.channel.send(
             content=f"Scheda di {self.user.mention}",
             embed=self.embed
         )
+        
+        # Track message owner in memory (only this bot session)
+        self.bot.message_owners[msg.id] = self.user.id
 
         await i.response.edit_message(content="Pubblicato.", view=None)
 
@@ -307,96 +304,78 @@ class CharacterCog(commands.Cog):
         name="mostra",
         description="Mostra una tua scheda e la pubblica nel canale corrente."
     )
-    async def mostra(self, i):
-        chars = load_all_characters(i.user.id)
-
-        if not chars:
-            return await i.response.send_message("Nessun personaggio trovato.", ephemeral=True)
-
-        async def h(inter, cid):
-            d = load_character(i.user.id, cid)
-            if not d:
-                return await inter.response.send_message("Personaggio non trovato.", ephemeral=True)
-
-            await inter.response.send_message(
-                "Vuoi mostrare questa scheda?",
-                embed=create_embed(d),
-                view=ShowConfirm(i.user, create_embed(d)),
+    @discord.app_commands.describe(
+        personaggio="Nome del personaggio da mostrare"
+    )
+    @discord.app_commands.autocomplete(personaggio=character_autocomplete)
+    async def mostra(self, i: discord.Interaction, personaggio: str):
+        """Show a character by name with autocomplete"""
+        d = load_character(i.user.id, personaggio)
+        
+        if not d:
+            return await i.response.send_message(
+                "Personaggio non trovato.",
                 ephemeral=True
             )
-
-        if len(chars) == 1:
-            await h(i, chars[0].character_id)
-        else:
-            await i.response.send_message(
-                "Seleziona un personaggio:",
-                view=SelectCharacter(i.user, chars, h),
-                ephemeral=True
-            )
+        
+        await i.response.send_message(
+            "Vuoi mostrare questa scheda?",
+            embed=create_embed(d),
+            view=ShowConfirm(i.user, create_embed(d), self.bot),
+            ephemeral=True
+        )
 
     @discord.app_commands.command(
         name="modifica",
         description="Modifica una scheda personaggio esistente."
     )
-    async def modifica(self, i):
-        chars = load_all_characters(i.user.id)
-
-        if not chars:
-            return await i.response.send_message("Nessun personaggio trovato.", ephemeral=True)
-
-        async def h(inter, cid):
-            d = load_character(i.user.id, cid)
-            if not d:
-                return await inter.response.send_message("Personaggio non trovato.", ephemeral=True)
-
-            await inter.response.send_message(
-                embed=create_embed(d),
-                view=EmbedEditor(d, user_id=i.user.id, bot=self.bot),
+    @discord.app_commands.describe(
+        personaggio="Nome del personaggio da modificare"
+    )
+    @discord.app_commands.autocomplete(personaggio=character_autocomplete)
+    async def modifica(self, i: discord.Interaction, personaggio: str):
+        """Modify a character by name"""
+        d = load_character(i.user.id, personaggio)
+        
+        if not d:
+            return await i.response.send_message(
+                "Personaggio non trovato.",
                 ephemeral=True
             )
-
-        if len(chars) == 1:
-            await h(i, chars[0].character_id)
-        else:
-            await i.response.send_message(
-                "Seleziona un personaggio:",
-                view=SelectCharacter(i.user, chars, h),
-                ephemeral=True
-            )
+        
+        await i.response.send_message(
+            embed=create_embed(d),
+            view=EmbedEditor(d, user_id=i.user.id, bot=self.bot),
+            ephemeral=True
+        )
 
     @discord.app_commands.command(
         name="elimina",
         description="Elimina un personaggio."
     )
-    async def elimina(self, i):
-        chars = load_all_characters(i.user.id)
-
-        if not chars:
-            return await i.response.send_message("Nessun personaggio trovato.", ephemeral=True)
-
-        async def h(inter, cid):
-            d = load_character(i.user.id, cid)
-            if not d:
-                return await inter.response.send_message("Personaggio non trovato.", ephemeral=True)
-
-            await inter.response.send_message(
-                embed=discord.Embed(
-                    title="Conferma eliminazione",
-                    description=d.nome,
-                    color=discord.Color.red()
-                ),
-                view=ConfirmDelete(i.user, cid),
+    @discord.app_commands.describe(
+        personaggio="Nome del personaggio da eliminare"
+    )
+    @discord.app_commands.autocomplete(personaggio=character_autocomplete)
+    async def elimina(self, i: discord.Interaction, personaggio: str):
+        """Delete a character by name"""
+        d = load_character(i.user.id, personaggio)
+        
+        if not d:
+            return await i.response.send_message(
+                "Personaggio non trovato.",
                 ephemeral=True
             )
-
-        if len(chars) == 1:
-            await h(i, chars[0].character_id)
-        else:
-            await i.response.send_message(
-                "Seleziona un personaggio:",
-                view=SelectCharacter(i.user, chars, h),
-                ephemeral=True
-            )
+        
+        await i.response.send_message(
+            embed=discord.Embed(
+                title="Conferma eliminazione",
+                description=d.nome,
+                color=discord.Color.red()
+            ),
+            view=ConfirmDelete(i.user, personaggio),
+            ephemeral=True
+        )
 
 
 async def setup(bot):
