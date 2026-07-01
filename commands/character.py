@@ -103,56 +103,69 @@ class EditModal(discord.ui.Modal):
         self.message = message
         self.view = view
 
+        # Get current value to pre-fill the input
+        current_value = getattr(data, field, "")
+        if current_value is None:
+            current_value = ""
+
         self.input = discord.ui.TextInput(
             label=title,
             style=discord.TextStyle.paragraph,
-            required=field not in self.OPTIONAL
+            required=field not in self.OPTIONAL,
+            default=str(current_value) if current_value else None
         )
 
         self.add_item(self.input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        value = self.input.value.strip()
+        try:
+            value = self.input.value.strip()
 
-        if self.field == "hex_color":
-            value = normalize_hex(value)
+            if self.field == "hex_color":
+                value = normalize_hex(value)
 
-            if value is None:
-                return await interaction.response.send_message(
-                    "Colore non valido (#FFF o #FFFFFF)",
-                    ephemeral=True
-                )
-            if not value:
+                if value is None:
+                    return await interaction.response.send_message(
+                        "Colore non valido (#FFF o #FFFFFF)",
+                        ephemeral=True
+                    )
+                if not value:
+                    value = None
+
+            if self.field in self.OPTIONAL and not value:
                 value = None
 
-        if self.field in self.OPTIONAL and not value:
-            value = None
+            if self.field not in self.OPTIONAL and not value:
+                return await interaction.response.send_message(
+                    "Campo obbligatorio",
+                    ephemeral=True
+                )
 
-        if self.field not in self.OPTIONAL and not value:
-            return await interaction.response.send_message(
-                "Campo obbligatorio",
-                ephemeral=True
-            )
+            setattr(self.data, self.field, value)
 
-        setattr(self.data, self.field, value)
+            # Use async save_character with race condition protection
+            try:
+                await save_character(interaction.user.id, self.data)
+            except ValueError as e:
+                return await interaction.response.send_message(
+                    f"Errore: {str(e)}",
+                    ephemeral=True
+                )
+            except Exception as e:
+                print(f"❌ Errore nel salvataggio: {e}")
+                return await interaction.response.send_message(
+                    "Errore nel salvataggio della scheda.",
+                    ephemeral=True
+                )
 
-        # Use async save_character with race condition protection
-        try:
-            await save_character(interaction.user.id, self.data)
-        except ValueError as e:
-            return await interaction.response.send_message(
-                f"Errore: {str(e)}",
-                ephemeral=True
-            )
+            await self.message.edit(embed=create_embed(self.data), view=self.view)
+            await interaction.response.defer()
         except Exception as e:
-            print(f"❌ Errore nel salvataggio: {e}")
-            return await interaction.response.send_message(
+            print(f"❌ Errore nel modal: {e}")
+            await interaction.response.send_message(
                 "Errore nel salvataggio della scheda.",
                 ephemeral=True
             )
-
-        await self.message.edit(embed=create_embed(self.data), view=self.view)
-        await interaction.response.defer()
 
 
 # =========================
