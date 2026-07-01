@@ -40,6 +40,9 @@ bot = commands.Bot(
     intents=intents
 )
 
+# Track message owners for delete reaction (message_id: user_id)
+bot.message_owners = {}
+
 # =========================
 # ERROR HANDLING
 # =========================
@@ -72,6 +75,43 @@ async def on_app_command_error(
             )
     except Exception:
         pass
+
+# =========================
+# REACTION DELETE
+# =========================
+
+@bot.event
+async def on_reaction_add(reaction, user):
+    """Allow users to delete their own character sheet messages with ❌ reaction"""
+    # Ignore bot reactions
+    if user.bot:
+        return
+    
+    # Only handle ❌ emoji
+    if str(reaction.emoji) != "❌":
+        return
+    
+    # Check if this message is tracked
+    message_id = reaction.message.id
+    if message_id not in bot.message_owners:
+        return
+    
+    # Only the owner can delete
+    owner_id = bot.message_owners[message_id]
+    if user.id != owner_id:
+        # Remove unauthorized reaction
+        try:
+            await reaction.remove(user)
+        except:
+            pass
+        return
+    
+    # Delete the message
+    try:
+        await reaction.message.delete()
+        del bot.message_owners[message_id]
+    except Exception as e:
+        print(f"❌ Errore nel cancellare il messaggio: {e}")
 
 # =========================
 # COG LOADER
