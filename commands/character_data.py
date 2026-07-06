@@ -7,10 +7,8 @@ import re
 
 DATA_PATH = "data/characters.json"
 
-# Character ID validation regex (8 hex chars)
 CHARACTER_ID_REGEX = re.compile(r"^[a-f0-9]{8}$", re.IGNORECASE)
 
-# Lock for concurrent edit prevention (user_id -> asyncio.Lock)
 _edit_locks = {}
 
 
@@ -37,7 +35,6 @@ def write_all(data):
 
 
 def get_edit_lock(user_id):
-    """Get or create an asyncio lock for a user to prevent concurrent edits"""
     uid = str(user_id)
     if uid not in _edit_locks:
         _edit_locks[uid] = asyncio.Lock()
@@ -45,7 +42,6 @@ def get_edit_lock(user_id):
 
 
 def validate_character_id(character_id):
-    """Validate character ID format and length"""
     if not character_id or not isinstance(character_id, str):
         return False
     return CHARACTER_ID_REGEX.match(character_id) is not None
@@ -60,7 +56,7 @@ class CharacterData:
         self.tema = "Non impostato"
         self.descrizione = "Non impostata"
         self.classe = "Non impostata"
-        self.abilita = ""  # EROICHE
+        self.abilita = ""
         self.link = ""
         self.immagine = None
         self.hex_color = "#5865F2"
@@ -104,10 +100,9 @@ def load_character(user_id, character_id=None):
         return None
 
     if character_id:
-        # Validate character ID
         if not validate_character_id(character_id):
             return None
-        
+
         raw = user_chars.get(character_id)
         if not raw:
             return None
@@ -128,19 +123,15 @@ def load_all_characters(user_id):
 
 
 async def save_character(user_id, obj):
-    """Save character with race condition protection using asyncio lock"""
-    # Get lock for this user
     lock = get_edit_lock(user_id)
-    
-    # Acquire lock to prevent concurrent saves
+
     async with lock:
-        data = read_all()
+        data = await asyncio.to_thread(read_all)
 
         uid = str(user_id)
         if uid not in data:
             data[uid] = {}
 
-        # Validate character ID before saving
         if not validate_character_id(obj.character_id):
             raise ValueError(f"Invalid character ID: {obj.character_id}")
 
@@ -158,27 +149,23 @@ async def save_character(user_id, obj):
             "hex_color": obj.hex_color
         }
 
-        write_all(data)
+        await asyncio.to_thread(write_all, data)
 
 
-def delete_character(user_id, character_id=None):
-    """Delete a character with validation"""
-    data = read_all()
+async def delete_character(user_id, character_id=None):
+    data = await asyncio.to_thread(read_all)
     uid = str(user_id)
 
-    if uid not in data:
-        return False
-
-    if not data[uid]:
+    if uid not in data or not data[uid]:
         return False
 
     if character_id:
-        # Validate character ID
         if not validate_character_id(character_id):
             return False
-        
+
         if character_id not in data[uid]:
             return False
+
         del data[uid][character_id]
     else:
         first = next(iter(data[uid]))
@@ -187,7 +174,7 @@ def delete_character(user_id, character_id=None):
     if not data[uid]:
         del data[uid]
 
-    write_all(data)
+    await asyncio.to_thread(write_all, data)
     return True
 
 
