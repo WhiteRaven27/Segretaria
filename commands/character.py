@@ -5,6 +5,8 @@ import os
 import asyncio
 import re
 
+from .message_owners_store import save_message_owners
+
 from .character_data import (
     CharacterData,
     create_embed,
@@ -319,8 +321,9 @@ class ShowConfirm(discord.ui.View):
             embed=self.embed
         )
         
-        # Track message owner in memory (only this bot session)
+        # Track message owner, persisted to disk so it survives restarts
         self.bot.message_owners[msg.id] = self.user.id
+        save_message_owners(self.bot.message_owners)
 
         await i.response.edit_message(content="Pubblicato.", view=None)
 
