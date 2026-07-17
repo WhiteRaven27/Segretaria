@@ -28,6 +28,8 @@ if not os.path.exists("data/characters.json"):
     with open("data/characters.json", "w", encoding="utf-8") as f:
         json.dump({}, f)
 
+from commands.message_owners_store import load_message_owners, save_message_owners
+
 # =========================
 # BOT
 # =========================
@@ -41,7 +43,7 @@ bot = commands.Bot(
 )
 
 # Track message owners for delete reaction (message_id: user_id)
-bot.message_owners = {}
+bot.message_owners = load_message_owners()
 
 # =========================
 # ERROR HANDLING
@@ -110,6 +112,7 @@ async def on_reaction_add(reaction, user):
     try:
         await reaction.message.delete()
         del bot.message_owners[message_id]
+        save_message_owners(bot.message_owners)
     except Exception as e:
         print(f"❌ Errore nel cancellare il messaggio: {e}")
 
@@ -124,6 +127,7 @@ async def load_cogs():
             filename.endswith(".py")
             and filename != "__init__.py"
             and filename != "character_data.py"
+            and filename != "message_owners_store.py"
         ):
             try:
                 await bot.load_extension(
