@@ -83,34 +83,41 @@ async def on_app_command_error(
 # =========================
 
 @bot.event
-async def on_reaction_add(reaction, user):
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     """Allow users to delete their own character sheet messages with ❌ reaction"""
     # Ignore bot reactions
-    if user.bot:
+    if payload.user_id == bot.user.id:
         return
-    
+
     # Only handle ❌ emoji
-    if str(reaction.emoji) != "❌":
+    if str(payload.emoji) != "❌":
         return
-    
+
     # Check if this message is tracked
-    message_id = reaction.message.id
+    message_id = payload.message_id
     if message_id not in bot.message_owners:
         return
-    
+
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
+        return
+
     # Only the owner can delete
     owner_id = bot.message_owners[message_id]
-    if user.id != owner_id:
+    if payload.user_id != owner_id:
         # Remove unauthorized reaction
         try:
-            await reaction.remove(user)
-        except:
+            message = await channel.fetch_message(message_id)
+            member = payload.member or await channel.guild.fetch_member(payload.user_id)
+            await message.remove_reaction(payload.emoji, member)
+        except Exception:
             pass
         return
-    
+
     # Delete the message
     try:
-        await reaction.message.delete()
+        message = await channel.fetch_message(message_id)
+        await message.delete()
         del bot.message_owners[message_id]
         save_message_owners(bot.message_owners)
     except Exception as e:
