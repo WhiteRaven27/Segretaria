@@ -158,15 +158,24 @@ class EditModal(discord.ui.Modal):
                     ephemeral=True
                 )
 
+            await interaction.response.defer()
             if self.message:
                 await self.message.edit(embed=create_embed(self.data), view=self.view)
-            await interaction.response.defer()
         except Exception as e:
             print(f"❌ Errore nel modal: {e}")
-            await interaction.response.send_message(
-                "Errore nel salvataggio della scheda.",
-                ephemeral=True
-            )
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "Errore nel salvataggio della scheda.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        "Errore nel salvataggio della scheda.",
+                        ephemeral=True
+                    )
+            except Exception:
+                pass
 
 
 # =========================
@@ -281,7 +290,7 @@ class ConfirmDelete(discord.ui.View):
             )
             return
 
-        delete_character(i.user.id, self.cid)
+        await delete_character(i.user.id, self.cid)
         await i.response.edit_message(content="Personaggio eliminato.", view=None)
 
     @discord.ui.button(label="NO", style=discord.ButtonStyle.secondary)

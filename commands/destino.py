@@ -112,7 +112,7 @@ class DestinoCog(commands.Cog):
         embed = build_embed(cid)
 
         if session["message"] is None:
-            msg = await interaction.followup.send(embed=embed)
+            msg = await interaction.followup.send(embed=embed, wait=True)
             session["message"] = msg
         else:
             await session["message"].edit(embed=embed)
