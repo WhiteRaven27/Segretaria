@@ -24,30 +24,31 @@ from .character_data import (
 GALLERY_CONFIG_FILE = "data/gallery_config.json"
 
 
-def load_gallery_config():
+def _read_gallery_config():
     if os.path.exists(GALLERY_CONFIG_FILE):
         try:
             with open(GALLERY_CONFIG_FILE, "r") as f:
                 return json.load(f)
-        except:
+        except Exception:
             return {}
     return {}
 
 
-def save_gallery_config(config):
+def _write_gallery_config(config):
     os.makedirs("data", exist_ok=True)
     with open(GALLERY_CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
 
 
-def get_gallery_channel(guild_id):
-    return load_gallery_config().get(str(guild_id))
+async def get_gallery_channel(guild_id):
+    config = await asyncio.to_thread(_read_gallery_config)
+    return config.get(str(guild_id))
 
 
-def set_gallery_channel(guild_id, channel_id):
-    config = load_gallery_config()
+async def set_gallery_channel(guild_id, channel_id):
+    config = await asyncio.to_thread(_read_gallery_config)
     config[str(guild_id)] = channel_id
-    save_gallery_config(config)
+    await asyncio.to_thread(_write_gallery_config, config)
 
 # =========================
 # Hex modifica
@@ -258,7 +259,7 @@ class EmbedEditor(discord.ui.View):
             if not i.guild:
                 return
 
-            cid = get_gallery_channel(i.guild.id)
+            cid = await get_gallery_channel(i.guild.id)
             if not cid:
                 return
 
@@ -323,7 +324,7 @@ class ShowConfirm(discord.ui.View):
         
         # Track message owner, persisted to disk so it survives restarts
         self.bot.message_owners[msg.id] = self.user.id
-        save_message_owners(self.bot.message_owners)
+        await save_message_owners(self.bot.message_owners)
 
         await i.response.edit_message(content="Pubblicato.", view=None)
 
@@ -345,7 +346,7 @@ class CharacterCog(commands.Cog):
         description="Imposta il canale dove verranno pubblicate le schede personaggio."
     )
     async def set_gallery(self, i, channel: discord.TextChannel):
-        set_gallery_channel(i.guild.id, channel.id)
+        await set_gallery_channel(i.guild.id, channel.id)
         await i.response.send_message("Canale impostato.", ephemeral=True)
 
     @discord.app_commands.command(

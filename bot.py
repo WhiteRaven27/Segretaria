@@ -35,7 +35,6 @@ from commands.message_owners_store import load_message_owners, save_message_owne
 # =========================
 
 intents = discord.Intents.default()
-intents.message_content = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -119,7 +118,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         message = await channel.fetch_message(message_id)
         await message.delete()
         del bot.message_owners[message_id]
-        save_message_owners(bot.message_owners)
+        await save_message_owners(bot.message_owners)
     except Exception as e:
         print(f"❌ Errore nel cancellare il messaggio: {e}")
 
