@@ -189,7 +189,7 @@ class EditModal(discord.ui.Modal):
 
 class EmbedEditor(discord.ui.View):
     def __init__(self, data, message=None, user_id=None, bot=None):
-        super().__init__(timeout=300)  # 5 minutes — lets Discord.py GC the view
+        super().__init__(timeout=1200)  # 20 minutes — lets Discord.py GC the view
         self.data = data
         self.message = message
         self.user_id = user_id
