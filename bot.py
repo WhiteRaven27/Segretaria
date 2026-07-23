@@ -35,6 +35,7 @@ from commands.message_owners_store import load_message_owners, save_message_owne
 # =========================
 
 intents = discord.Intents.default()
+intents.members = True  # needed to fetch members for reaction permission checks
 
 bot = commands.Bot(
     command_prefix="!",
@@ -152,18 +153,20 @@ async def load_cogs():
 # READY
 # =========================
 
+_synced = False
+
 @bot.event
 async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"Slash commands sincronizzati: {len(synced)}")
-
-        # 👇 AGGIUNGI QUESTO
-        for cmd in bot.tree.get_commands():
-            print(f"COMANDO: {cmd.name}")
-
-    except Exception as e:
-        print(e)
+    global _synced
+    if not _synced:
+        try:
+            synced = await bot.tree.sync()
+            print(f"Slash commands sincronizzati: {len(synced)}")
+            for cmd in bot.tree.get_commands():
+                print(f"COMANDO: {cmd.name}")
+            _synced = True
+        except Exception as e:
+            print(f"Errore sync: {e}")
 
     print(f"Connesso come {bot.user}")
     
