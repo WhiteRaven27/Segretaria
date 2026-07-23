@@ -22,6 +22,12 @@ class ApprovalCog(commands.Cog):
     async def approvazione(self, interaction: discord.Interaction, user: discord.Member):
         guild = interaction.guild
 
+        if guild is None:
+            await interaction.response.send_message(
+                "Questo comando funziona solo nei server.", ephemeral=True
+            )
+            return
+
         # Check that the approver role exists in the server
         approver_role = self.find_role_case_insensitive(guild, ROLE_APPROVER)
         if approver_role is None:

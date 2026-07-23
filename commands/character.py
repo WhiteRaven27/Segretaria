@@ -189,11 +189,20 @@ class EditModal(discord.ui.Modal):
 
 class EmbedEditor(discord.ui.View):
     def __init__(self, data, message=None, user_id=None, bot=None):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)  # 5 minutes — lets Discord.py GC the view
         self.data = data
         self.message = message
         self.user_id = user_id
         self.bot = bot
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
 
     async def open(self, interaction, title, field):
         await interaction.response.send_modal(
