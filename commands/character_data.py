@@ -30,8 +30,10 @@ def read_all():
 
 def write_all(data):
     ensure_file()
-    with open(DATA_PATH, "w") as f:
+    tmp = DATA_PATH + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(data, f, indent=4)
+    os.replace(tmp, DATA_PATH)  # atomic on all major OS
 
 
 def get_edit_lock(user_id):
@@ -92,8 +94,8 @@ def create_embed(data: CharacterData):
     return embed
 
 
-def load_character(user_id, character_id=None):
-    data = read_all()
+async def load_character(user_id, character_id=None):
+    data = await asyncio.to_thread(read_all)
     user_chars = data.get(str(user_id), {})
 
     if not user_chars:
@@ -112,8 +114,8 @@ def load_character(user_id, character_id=None):
     return _to_obj(first_id, user_chars[first_id])
 
 
-def load_all_characters(user_id):
-    data = read_all()
+async def load_all_characters(user_id):
+    data = await asyncio.to_thread(read_all)
     user_chars = data.get(str(user_id), {})
 
     return [
@@ -153,6 +155,12 @@ async def save_character(user_id, obj):
 
 
 async def delete_character(user_id, character_id=None):
+    lock = get_edit_lock(user_id)
+    async with lock:
+        return await _delete_character_locked(user_id, character_id)
+
+
+async def _delete_character_locked(user_id, character_id=None):
     data = await asyncio.to_thread(read_all)
     uid = str(user_id)
 

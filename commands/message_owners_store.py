@@ -19,8 +19,10 @@ def load_message_owners():
 
 def _write_message_owners(data):
     os.makedirs("data", exist_ok=True)
-    with open(MESSAGE_OWNERS_FILE, "w") as f:
+    tmp = MESSAGE_OWNERS_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump({str(k): v for k, v in data.items()}, f, indent=4)
+    os.replace(tmp, MESSAGE_OWNERS_FILE)  # atomic on all major OS
 
 
 async def save_message_owners(data):
