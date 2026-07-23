@@ -48,6 +48,12 @@ class DestinoCog(commands.Cog):
         draw: int = None,
         reset: bool = False
     ):
+        if interaction.channel is None:
+            await interaction.response.send_message(
+                "Questo comando non funziona qui.", ephemeral=True
+            )
+            return
+
         await interaction.response.defer()
 
         cid = interaction.channel.id

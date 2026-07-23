@@ -36,8 +36,10 @@ def _read_gallery_config():
 
 def _write_gallery_config(config):
     os.makedirs("data", exist_ok=True)
-    with open(GALLERY_CONFIG_FILE, "w") as f:
+    tmp = GALLERY_CONFIG_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(config, f, indent=4)
+    os.replace(tmp, GALLERY_CONFIG_FILE)  # atomic on all major OS
 
 
 async def get_gallery_channel(guild_id):
@@ -80,7 +82,7 @@ async def character_autocomplete(
     current: str,
 ) -> list[discord.app_commands.Choice[str]]:
     """Autocomplete for character names"""
-    chars = load_all_characters(interaction.user.id)
+    chars = await load_all_characters(interaction.user.id)
     
     # Filter characters by what the user typed
     matches = [c for c in chars if c.nome.lower().startswith(current.lower())]
@@ -256,16 +258,17 @@ class EmbedEditor(discord.ui.View):
             return
 
         async def post():
-            if not i.guild:
-                return
-
-            cid = await get_gallery_channel(i.guild.id)
-            if not cid:
-                return
-
-            ch = self.bot.get_channel(cid)
-            if ch:
-                await ch.send(embed=create_embed(self.data))
+            try:
+                if not i.guild:
+                    return
+                cid = await get_gallery_channel(i.guild.id)
+                if not cid:
+                    return
+                ch = self.bot.get_channel(cid)
+                if ch:
+                    await ch.send(embed=create_embed(self.data))
+            except Exception as e:
+                print(f"❌ Errore nel post gallery: {e}")
 
         asyncio.create_task(post())
 
@@ -283,6 +286,7 @@ class ConfirmDelete(discord.ui.View):
     @discord.ui.button(label="SI", style=discord.ButtonStyle.danger)
     async def si(self, i, b):
         if i.user != self.user:
+            await i.response.defer()
             return
 
         # Validate character ID before deletion
@@ -315,6 +319,7 @@ class ShowConfirm(discord.ui.View):
     @discord.ui.button(label="SI", style=discord.ButtonStyle.success)
     async def si(self, i, b):
         if i.user != self.user:
+            await i.response.defer()
             return
 
         msg = await i.channel.send(
@@ -370,7 +375,7 @@ class CharacterCog(commands.Cog):
     @discord.app_commands.autocomplete(personaggio=character_autocomplete)
     async def mostra(self, i: discord.Interaction, personaggio: str):
         """Show a character by name with autocomplete"""
-        d = load_character(i.user.id, personaggio)
+        d = await load_character(i.user.id, personaggio)
         
         if not d:
             return await i.response.send_message(
@@ -395,7 +400,7 @@ class CharacterCog(commands.Cog):
     @discord.app_commands.autocomplete(personaggio=character_autocomplete)
     async def modifica(self, i: discord.Interaction, personaggio: str):
         """Modify a character by name"""
-        d = load_character(i.user.id, personaggio)
+        d = await load_character(i.user.id, personaggio)
         
         if not d:
             return await i.response.send_message(
@@ -422,7 +427,7 @@ class CharacterCog(commands.Cog):
     @discord.app_commands.autocomplete(personaggio=character_autocomplete)
     async def elimina(self, i: discord.Interaction, personaggio: str):
         """Delete a character by name"""
-        d = load_character(i.user.id, personaggio)
+        d = await load_character(i.user.id, personaggio)
         
         if not d:
             return await i.response.send_message(
