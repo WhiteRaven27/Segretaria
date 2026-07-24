@@ -1,49 +1,70 @@
-import json
+import sqlite3
 import discord
 import uuid
 import os
 import asyncio
 import re
 
-DATA_PATH = "data/characters.json"
+DB_PATH = "data/characters.db"
 
 CHARACTER_ID_REGEX = re.compile(r"^[a-f0-9]{8}$", re.IGNORECASE)
 
 _edit_locks = {}
 
 
-def ensure_file():
+def _get_connection() -> sqlite3.Connection:
+    """Get a connection to the SQLite database (thread-safe)."""
     os.makedirs("data", exist_ok=True)
-    if not os.path.exists(DATA_PATH):
-        with open(DATA_PATH, "w") as f:
-            json.dump({}, f)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
 
 
-def read_all():
-    ensure_file()
+def _init_db():
+    """Create tables if they don't exist."""
+    conn = _get_connection()
     try:
-        with open(DATA_PATH, "r") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        return {}
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS characters (
+                user_id      TEXT NOT NULL,
+                character_id TEXT NOT NULL,
+                nome         TEXT DEFAULT '',
+                identita     TEXT DEFAULT '',
+                origine      TEXT DEFAULT '',
+                tema         TEXT DEFAULT '',
+                descrizione  TEXT DEFAULT '',
+                classe       TEXT DEFAULT '',
+                abilita      TEXT DEFAULT '',
+                link         TEXT DEFAULT '',
+                immagine     TEXT DEFAULT NULL,
+                hex_color    TEXT DEFAULT '#5865F2',
+                PRIMARY KEY (user_id, character_id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS gallery_config (
+                guild_id   TEXT PRIMARY KEY,
+                channel_id INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS message_owners (
+                message_id INTEGER PRIMARY KEY,
+                user_id    INTEGER NOT NULL
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
 
 
-def write_all(data):
-    ensure_file()
-    tmp = DATA_PATH + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(data, f, indent=4)
-    os.replace(tmp, DATA_PATH)  # atomic on all major OS
+# Initialize DB at module load
+_init_db()
 
 
-def get_edit_lock(user_id):
-    uid = str(user_id)
-    if uid not in _edit_locks:
-        _edit_locks[uid] = asyncio.Lock()
-    return _edit_locks[uid]
-
-
-def validate_character_id(character_id):
+def validate_character_id(character_id: str) -> bool:
     if not character_id or not isinstance(character_id, str):
         return False
     return CHARACTER_ID_REGEX.match(character_id) is not None
@@ -64,7 +85,15 @@ class CharacterData:
         self.hex_color = "#5865F2"
 
 
-def create_embed(data: CharacterData):
+def _row_to_obj(row: sqlite3.Row) -> CharacterData:
+    obj = CharacterData(character_id=row["character_id"])
+    for key in ("nome", "identita", "origine", "tema", "descrizione",
+                "classe", "abilita", "link", "immagine", "hex_color"):
+        setattr(obj, key, row[key])
+    return obj
+
+
+def create_embed(data: CharacterData) -> discord.Embed:
     try:
         color = discord.Color.from_str(data.hex_color)
     except:
@@ -85,7 +114,7 @@ def create_embed(data: CharacterData):
         embed.add_field(name="Eroiche", value=data.abilita, inline=False)
 
     if data.link:
-        embed.add_field(name="Link Scheda", value=data.link, inline=False)
+        embed.add_field(name="Scheda", value=data.link, inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
@@ -94,101 +123,193 @@ def create_embed(data: CharacterData):
     return embed
 
 
-async def load_character(user_id, character_id=None):
-    data = await asyncio.to_thread(read_all)
-    user_chars = data.get(str(user_id), {})
-
-    if not user_chars:
-        return None
-
-    if character_id:
-        if not validate_character_id(character_id):
-            return None
-
-        raw = user_chars.get(character_id)
-        if not raw:
-            return None
-        return _to_obj(character_id, raw)
-
-    first_id = next(iter(user_chars))
-    return _to_obj(first_id, user_chars[first_id])
-
-
-async def load_all_characters(user_id):
-    data = await asyncio.to_thread(read_all)
-    user_chars = data.get(str(user_id), {})
-
-    return [
-        _to_obj(cid, raw)
-        for cid, raw in user_chars.items()
-    ]
-
-
-async def save_character(user_id, obj):
-    lock = get_edit_lock(user_id)
-
-    async with lock:
-        data = await asyncio.to_thread(read_all)
-
-        uid = str(user_id)
-        if uid not in data:
-            data[uid] = {}
-
-        if not validate_character_id(obj.character_id):
-            raise ValueError(f"Invalid character ID: {obj.character_id}")
-
-        data[uid][obj.character_id] = {
-            "character_id": obj.character_id,
-            "nome": obj.nome,
-            "identita": obj.identita,
-            "origine": obj.origine,
-            "tema": obj.tema,
-            "descrizione": obj.descrizione,
-            "classe": obj.classe,
-            "abilita": obj.abilita,
-            "link": obj.link,
-            "immagine": obj.immagine,
-            "hex_color": obj.hex_color
-        }
-
-        await asyncio.to_thread(write_all, data)
-
-
-async def delete_character(user_id, character_id=None):
-    lock = get_edit_lock(user_id)
-    async with lock:
-        return await _delete_character_locked(user_id, character_id)
-
-
-async def _delete_character_locked(user_id, character_id=None):
-    data = await asyncio.to_thread(read_all)
+def get_edit_lock(user_id):
     uid = str(user_id)
-
-    if uid not in data or not data[uid]:
-        return False
-
-    if character_id:
-        if not validate_character_id(character_id):
-            return False
-
-        if character_id not in data[uid]:
-            return False
-
-        del data[uid][character_id]
-    else:
-        first = next(iter(data[uid]))
-        del data[uid][first]
-
-    if not data[uid]:
-        del data[uid]
-
-    await asyncio.to_thread(write_all, data)
-    return True
+    if uid not in _edit_locks:
+        _edit_locks[uid] = asyncio.Lock()
+    return _edit_locks[uid]
 
 
-def _to_obj(cid, d):
-    obj = CharacterData(character_id=cid)
-    for k, v in d.items():
-        if k != "character_id":
-            setattr(obj, k, v)
-    return obj
+async def read_all() -> dict:
+    """Return full data as nested dict (for backward compat with scheda.py)."""
+    def _read():
+        conn = _get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM characters ORDER BY user_id, character_id"
+            ).fetchall()
+            data = {}
+            for row in rows:
+                uid = row["user_id"]
+                if uid not in data:
+                    data[uid] = {}
+                data[uid][row["character_id"]] = {
+                    "character_id": row["character_id"],
+                    "nome": row["nome"],
+                    "identita": row["identita"],
+                    "origine": row["origine"],
+                    "tema": row["tema"],
+                    "descrizione": row["descrizione"],
+                    "classe": row["classe"],
+                    "abilita": row["abilita"],
+                    "link": row["link"],
+                    "immagine": row["immagine"],
+                    "hex_color": row["hex_color"],
+                }
+            return data
+        finally:
+            conn.close()
+    return await asyncio.to_thread(_read)
+
+
+async def load_character(user_id, character_id=None) -> CharacterData | None:
+    def _load():
+        conn = _get_connection()
+        try:
+            uid = str(user_id)
+            if character_id:
+                if not validate_character_id(character_id):
+                    return None
+                row = conn.execute(
+                    "SELECT * FROM characters WHERE user_id = ? AND character_id = ?",
+                    (uid, character_id)
+                ).fetchone()
+                return _row_to_obj(row) if row else None
+            else:
+                # Return first character for user
+                row = conn.execute(
+                    "SELECT * FROM characters WHERE user_id = ? ORDER BY rowid LIMIT 1",
+                    (uid,)
+                ).fetchone()
+                return _row_to_obj(row) if row else None
+        finally:
+            conn.close()
+    return await asyncio.to_thread(_load)
+
+
+async def load_all_characters(user_id) -> list[CharacterData]:
+    def _load_all():
+        conn = _get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM characters WHERE user_id = ? ORDER BY nome",
+                (str(user_id),)
+            ).fetchall()
+            return [_row_to_obj(r) for r in rows]
+        finally:
+            conn.close()
+    return await asyncio.to_thread(_load_all)
+
+
+async def save_character(user_id, obj: CharacterData):
+    lock = get_edit_lock(user_id)
+    async with lock:
+        def _save():
+            conn = _get_connection()
+            try:
+                if not validate_character_id(obj.character_id):
+                    raise ValueError(f"Invalid character ID: {obj.character_id}")
+
+                conn.execute("""
+                    INSERT OR REPLACE INTO characters
+                        (user_id, character_id, nome, identita, origine, tema,
+                         descrizione, classe, abilita, link, immagine, hex_color)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    str(user_id), obj.character_id,
+                    obj.nome, obj.identita, obj.origine, obj.tema,
+                    obj.descrizione, obj.classe, obj.abilita,
+                    obj.link, obj.immagine, obj.hex_color,
+                ))
+                conn.commit()
+            finally:
+                conn.close()
+
+        await asyncio.to_thread(_save)
+
+
+async def delete_character(user_id, character_id=None) -> bool:
+    lock = get_edit_lock(user_id)
+    async with lock:
+        def _delete():
+            conn = _get_connection()
+            try:
+                uid = str(user_id)
+                if character_id:
+                    if not validate_character_id(character_id):
+                        return False
+                    cursor = conn.execute(
+                        "DELETE FROM characters WHERE user_id = ? AND character_id = ?",
+                        (uid, character_id)
+                    )
+                else:
+                    # Delete first character
+                    cursor = conn.execute(
+                        "DELETE FROM characters WHERE user_id = ? AND rowid IN ("
+                        "SELECT rowid FROM characters WHERE user_id = ? LIMIT 1)",
+                        (uid, uid)
+                    )
+                conn.commit()
+                return cursor.rowcount > 0
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(_delete)
+
+
+# ─── Gallery config ───────────────────────────────────────
+
+async def get_gallery_channel(guild_id) -> int | None:
+    def _get():
+        conn = _get_connection()
+        try:
+            row = conn.execute(
+                "SELECT channel_id FROM gallery_config WHERE guild_id = ?",
+                (str(guild_id),)
+            ).fetchone()
+            return row["channel_id"] if row else None
+        finally:
+            conn.close()
+    return await asyncio.to_thread(_get)
+
+
+async def set_gallery_channel(guild_id, channel_id: int):
+    def _set():
+        conn = _get_connection()
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO gallery_config (guild_id, channel_id)
+                VALUES (?, ?)
+            """, (str(guild_id), channel_id))
+            conn.commit()
+        finally:
+            conn.close()
+    await asyncio.to_thread(_set)
+
+
+# ─── Message owners ──────────────────────────────────────
+
+def load_message_owners() -> dict[int, int]:
+    """Sync — only called once at startup before the event loop is busy."""
+    conn = _get_connection()
+    try:
+        rows = conn.execute("SELECT message_id, user_id FROM message_owners").fetchall()
+        return {row["message_id"]: row["user_id"] for row in rows}
+    finally:
+        conn.close()
+
+
+async def save_message_owners(data: dict[int, int]):
+    def _save():
+        conn = _get_connection()
+        try:
+            conn.execute("DELETE FROM message_owners")
+            conn.executemany(
+                "INSERT INTO message_owners (message_id, user_id) VALUES (?, ?)",
+                [(str(mid), uid) for mid, uid in data.items()]
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    await asyncio.to_thread(_save)
+

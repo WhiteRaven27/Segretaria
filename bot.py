@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 import logging
 import traceback
@@ -19,14 +18,10 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TOKEN")
 
 # =========================
-# DATA FILES
+# DATA
 # =========================
 
 os.makedirs("data", exist_ok=True)
-
-if not os.path.exists("data/characters.json"):
-    with open("data/characters.json", "w", encoding="utf-8") as f:
-        json.dump({}, f)
 
 from commands.message_owners_store import load_message_owners, save_message_owners
 
@@ -135,7 +130,7 @@ async def load_cogs():
             and filename != "__init__.py"
             and filename != "character_data.py"
             and filename != "message_owners_store.py"
-            and filename != "character.py"
+            and filename != "gallery_store.py"
             and filename != "sheet.py"
         ):
             try:
