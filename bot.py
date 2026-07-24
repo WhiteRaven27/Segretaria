@@ -135,6 +135,8 @@ async def load_cogs():
             and filename != "__init__.py"
             and filename != "character_data.py"
             and filename != "message_owners_store.py"
+            and filename != "character.py"
+            and filename != "sheet.py"
         ):
             try:
                 await bot.load_extension(

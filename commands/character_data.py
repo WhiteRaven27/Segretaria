@@ -53,39 +53,33 @@ class CharacterData:
     def __init__(self, character_id=None):
         self.character_id = character_id or str(uuid.uuid4())[:8]
         self.nome = "Non impostato"
+        self.livello = "—"
         self.identita = "Non impostata"
         self.origine = "Non impostata"
         self.tema = "Non impostato"
-        self.descrizione = "Non impostata"
         self.classe = "Non impostata"
         self.abilita = ""
-        self.link = ""
         self.immagine = None
         self.hex_color = "#5865F2"
+        self.sheet_url = None
 
 
 def create_embed(data: CharacterData):
     try:
         color = discord.Color.from_str(data.hex_color)
-    except:
+    except Exception:
         color = discord.Color.blurple()
 
-    embed = discord.Embed(
-        title=data.nome,
-        description=data.descrizione,
-        color=color
-    )
+    embed = discord.Embed(title=data.nome, color=color)
 
-    embed.add_field(name="Identità", value=data.identita, inline=True)
-    embed.add_field(name="Origine", value=data.origine, inline=True)
-    embed.add_field(name="Tema", value=data.tema, inline=True)
-    embed.add_field(name="Classe", value=data.classe, inline=True)
+    embed.add_field(name="Livello",   value=getattr(data, "livello",  "—") or "—", inline=True)
+    embed.add_field(name="Identità",  value=data.identita, inline=True)
+    embed.add_field(name="Origine",   value=data.origine,  inline=True)
+    embed.add_field(name="Tema",      value=data.tema,     inline=True)
+    embed.add_field(name="Classe",    value=data.classe,   inline=False)
 
     if data.abilita:
-        embed.add_field(name="Eroiche", value=data.abilita, inline=False)
-
-    if data.link:
-        embed.add_field(name="Link Scheda", value=data.link, inline=False)
+        embed.add_field(name="Abilità Eroiche", value=data.abilita, inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
@@ -139,16 +133,16 @@ async def save_character(user_id, obj):
 
         data[uid][obj.character_id] = {
             "character_id": obj.character_id,
-            "nome": obj.nome,
-            "identita": obj.identita,
-            "origine": obj.origine,
-            "tema": obj.tema,
-            "descrizione": obj.descrizione,
-            "classe": obj.classe,
-            "abilita": obj.abilita,
-            "link": obj.link,
-            "immagine": obj.immagine,
-            "hex_color": obj.hex_color
+            "nome":      obj.nome,
+            "livello":   getattr(obj, "livello",   "—"),
+            "identita":  obj.identita,
+            "origine":   obj.origine,
+            "tema":      obj.tema,
+            "classe":    obj.classe,
+            "abilita":   obj.abilita,
+            "immagine":  obj.immagine,
+            "hex_color": obj.hex_color,
+            "sheet_url": getattr(obj, "sheet_url", None),
         }
 
         await asyncio.to_thread(write_all, data)
