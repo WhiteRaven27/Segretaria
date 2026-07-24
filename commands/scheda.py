@@ -65,9 +65,18 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 4. Build CharacterData
+        # 4. Validate parsed data (CSV vuoto o non valido)
+        nome = parsed.get("nome", "Sconosciuto")
+        if nome == "Sconosciuto" and parsed.get("identita", "—") == "—":
+            return await interaction.followup.send(
+                "❌ Il foglio Google Sheets sembra vuoto o non contiene una scheda valida. "
+                "Assicurati che il foglio abbia la struttura standard di Fabula Ultima.",
+                ephemeral=True
+            )
+
+        # 5. Build CharacterData
         data = CharacterData()
-        data.nome = parsed.get("nome", "Sconosciuto")
+        data.nome = nome
         data.identita = parsed.get("identita", "—")
         data.origine = parsed.get("origine", "—")
         data.tema = parsed.get("tema", "—")
@@ -79,7 +88,7 @@ class SchedaCog(commands.Cog):
         livello = parsed.get("livello", "—")
         data.descrizione = f"Livello: {livello}"
 
-        # 5. Check if URL already exists for this user
+        # 6. Check if URL already exists for this user
         all_data = await read_all()
         user_data = all_data.get(str(interaction.user.id), {})
         url_clean = url.strip().rstrip("/")
@@ -90,7 +99,7 @@ class SchedaCog(commands.Cog):
                     ephemeral=True
                 )
 
-        # 6. Save
+        # 7. Save
         try:
             await save_character(interaction.user.id, data)
         except Exception as e:
@@ -99,7 +108,7 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 7. Post to gallery if configured
+        # 8. Post to gallery if configured
         async def post_gallery():
             try:
                 if not interaction.guild:
@@ -118,7 +127,7 @@ class SchedaCog(commands.Cog):
 
         asyncio.create_task(post_gallery())
 
-        # 8. Ephemeral confirmation only (embed goes only to gallery)
+        # 9. Ephemeral confirmation only (embed goes only to gallery)
         await interaction.followup.send("✅ Scheda caricata.", ephemeral=True)
 
     @discord.app_commands.command(
@@ -180,8 +189,16 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 6. Update character data from sheet (preserve character_id, link, hex_color)
-        existing.nome = parsed.get("nome", existing.nome)
+        # 6. Validate parsed data
+        nome = parsed.get("nome", "Sconosciuto")
+        if nome == "Sconosciuto" and parsed.get("identita", "—") == "—":
+            return await interaction.followup.send(
+                "❌ Il foglio Google Sheets sembra vuoto. Nessun dato aggiornato.",
+                ephemeral=True
+            )
+
+        # 7. Update character data from sheet (preserve character_id, link, hex_color)
+        existing.nome = nome
         existing.identita = parsed.get("identita", existing.identita)
         existing.origine = parsed.get("origine", existing.origine)
         existing.tema = parsed.get("tema", existing.tema)
@@ -192,7 +209,7 @@ class SchedaCog(commands.Cog):
         livello = parsed.get("livello", "—")
         existing.descrizione = f"Livello: {livello}"
 
-        # 7. Save
+        # 8. Save
         try:
             await save_character(interaction.user.id, existing)
         except Exception as e:
@@ -201,7 +218,7 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 8. Post to gallery if configured
+        # 9. Post to gallery if configured
         async def post_gallery():
             try:
                 if not interaction.guild:
@@ -220,7 +237,7 @@ class SchedaCog(commands.Cog):
 
         asyncio.create_task(post_gallery())
 
-        # 9. Ephemeral confirmation only (embed goes only to gallery)
+        # 10. Ephemeral confirmation only (embed goes only to gallery)
         await interaction.followup.send("✅ Scheda aggiornata.", ephemeral=True)
 
     @discord.app_commands.command(

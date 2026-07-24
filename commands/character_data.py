@@ -300,16 +300,17 @@ def load_message_owners() -> dict[int, int]:
 
 
 async def save_message_owners(data: dict[int, int]):
+    """Salva i message_owners con INSERT OR REPLACE per ogni entry.
+    Usa list(data.items()) per evitare 'dictionary changed size during iteration'
+    se il dizionario viene modificato durante l'iterazione."""
     def _save():
         conn = _get_connection()
         try:
-            conn.execute("DELETE FROM message_owners")
             conn.executemany(
-                "INSERT INTO message_owners (message_id, user_id) VALUES (?, ?)",
-                [(str(mid), uid) for mid, uid in data.items()]
+                "INSERT OR REPLACE INTO message_owners (message_id, user_id) VALUES (?, ?)",
+                [(mid, uid) for mid, uid in list(data.items())]
             )
             conn.commit()
         finally:
             conn.close()
     await asyncio.to_thread(_save)
-

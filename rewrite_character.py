@@ -1,4 +1,8 @@
-import discord
+import sys
+
+path = r'c:\Users\dalid\Desktop\Segretaria-main\Segretaria-main\commands\character.py'
+
+code = r"""import discord
 from discord.ext import commands
 import asyncio
 
@@ -15,7 +19,6 @@ from .character_data import (
 from .gallery_store import get_gallery_channel, set_gallery_channel
 from .sheet import normalize_hex
 
-
 async def character_autocomplete(
     interaction: discord.Interaction,
     current: str,
@@ -27,6 +30,40 @@ async def character_autocomplete(
         for c in matches[:25]
     ]
 
+class HexModal(discord.ui.Modal):
+    def __init__(self, data, user_id, bot):
+        super().__init__(title="Colore Embed")
+        self.data = data
+        self.user_id = user_id
+        self.bot = bot
+        current = data.hex_color or "#5865F2"
+        self.input = discord.ui.TextInput(
+            label="Hex Colore (#RRGGBB o #RGB)",
+            style=discord.TextStyle.short,
+            required=True,
+            default=current,
+            placeholder="es. #FF5733"
+        )
+        self.add_item(self.input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("Non puoi modificare questa scheda.", ephemeral=True)
+        value = self.input.value.strip()
+        hex_color = normalize_hex(value)
+        if hex_color is None:
+            return await interaction.response.send_message(
+                "Colore non valido. Usa #FFF o #FFFFFF.", ephemeral=True
+            )
+        self.data.hex_color = hex_color
+        try:
+            await save_character(self.user_id, self.data)
+            embed = create_embed(self.data)
+            await interaction.response.send_message(
+                "Colore hex aggiornato!", embed=embed, ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"Errore: {str(e)}", ephemeral=True)
 
 class ShowConfirm(discord.ui.View):
     def __init__(self, user, embed, bot):
@@ -52,7 +89,6 @@ class ShowConfirm(discord.ui.View):
     async def no(self, i, b):
         await i.response.edit_message(content="Annullato.", view=None)
 
-
 class CharacterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -61,8 +97,6 @@ class CharacterCog(commands.Cog):
         name="set-gallery",
         description="Imposta il canale dove verranno pubblicate le schede personaggio."
     )
-    @discord.app_commands.default_permissions(manage_guild=True)
-    @discord.app_commands.guild_only()
     async def set_gallery(self, i, channel: discord.TextChannel):
         await set_gallery_channel(i.guild.id, channel.id)
         await i.response.send_message("Canale impostato.", ephemeral=True)
@@ -85,41 +119,25 @@ class CharacterCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="modifica",
-        description="Modifica l'hex color di una scheda personaggio."
+        name="hex",
+        description="Cambia il colore hex dell'embed di una scheda personaggio."
     )
-    @discord.app_commands.describe(
-        personaggio="Nome del personaggio",
-        hex="Colore hex (es. #FF5733 o #FFF, opzionale)"
-    )
+    @discord.app_commands.describe(personaggio="Nome del personaggio")
     @discord.app_commands.autocomplete(personaggio=character_autocomplete)
-    async def modifica(self, i: discord.Interaction, personaggio: str, hex: str = None):
+    async def cmd_hex(self, i: discord.Interaction, personaggio: str):
         d = await load_character(i.user.id, personaggio)
         if not d:
             return await i.response.send_message("Personaggio non trovato.", ephemeral=True)
-
-        if hex is not None:
-            hex_color = normalize_hex(hex)
-            if hex_color is None:
-                return await i.response.send_message(
-                    "Colore non valido. Usa #FFF o #FFFFFF.", ephemeral=True
-                )
-            d.hex_color = hex_color
-            try:
-                await save_character(i.user.id, d)
-                embed = create_embed(d)
-                await i.response.send_message(
-                    f"Colore aggiornato a {hex_color}!", embed=embed, ephemeral=True
-                )
-            except Exception as e:
-                await i.response.send_message(f"Errore: {str(e)}", ephemeral=True)
-        else:
-            embed = create_embed(d)
-            await i.response.send_message(
-                embed=embed,
-                ephemeral=True
-            )
-
+        modal = HexModal(d, user_id=i.user.id, bot=self.bot)
+        await i.response.send_modal(modal)
 
 async def setup(bot):
     await bot.add_cog(CharacterCog(bot))
+"""
+
+with open(path, 'w', encoding='utf-8') as f:
+    f.write(code.lstrip())
+
+print(f"Written {len(code)} chars to character.py")
+
+# Verify it compiles

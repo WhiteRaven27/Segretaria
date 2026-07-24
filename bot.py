@@ -30,7 +30,9 @@ from commands.message_owners_store import load_message_owners, save_message_owne
 # =========================
 
 intents = discord.Intents.default()
-intents.members = True  # needed to fetch members for reaction permission checks
+# Nota: intents.members NON abilitato per evitare crash all'avvio
+# (il bot richiederebbe Server Members Intent nel Developer Portal)
+# on_raw_reaction_add fornisce già payload.member via API
 
 bot = commands.Bot(
     command_prefix="!",

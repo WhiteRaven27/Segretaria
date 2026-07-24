@@ -6,6 +6,15 @@ import urllib.request
 import urllib.error
 
 # ─────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────
+
+# Dimensione massima risposta: 5 MB
+_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+# Numero massimo di righe CSV da processare
+_MAX_CSV_ROWS = 100
+
+# ─────────────────────────────────────────
 # Sheet ID extraction
 # ─────────────────────────────────────────
 
@@ -32,7 +41,7 @@ def normalize_hex(value: str | None) -> str | None:
 
 
 # ─────────────────────────────────────────
-# CSV fetch
+# CSV fetch (con limite di dimensione)
 # ─────────────────────────────────────────
 
 def _fetch_csv_sync(sheet_id: str) -> str:
@@ -40,7 +49,13 @@ def _fetch_csv_sync(sheet_id: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read().decode("utf-8")
+            raw = resp.read(_MAX_RESPONSE_BYTES + 1)
+            if len(raw) > _MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    "Il foglio è troppo grande (max 5 MB). "
+                    "Riduci il numero di righe o colonne."
+                )
+            return raw.decode("utf-8")
     except urllib.error.HTTPError as e:
         raise ValueError(
             f"Impossibile accedere al foglio (HTTP {e.code}). "
