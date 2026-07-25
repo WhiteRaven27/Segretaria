@@ -1,12 +1,23 @@
 import discord
 from discord.ext import commands
 import random
+import time
 
 # sessioni per canale
 sessions = {}
 
 # Limite massimo partecipanti (embed field max 1024 caratteri)
 _MAX_POOL_SIZE = 50
+# Timeout sessione in secondi (30 minuti)
+_SESSION_TIMEOUT = 30 * 60
+
+
+def _cleanup_sessions():
+    """Rimuove le sessioni scadute per evitare memory leak."""
+    now = time.time()
+    stale = [cid for cid, s in list(sessions.items()) if now - s.get("_created", now) > _SESSION_TIMEOUT]
+    for cid in stale:
+        sessions.pop(cid, None)
 
 
 def build_embed(cid):
@@ -72,7 +83,8 @@ class DestinoCog(commands.Cog):
             sessions[cid] = {
                 "pool": [],
                 "result": [],
-                "message": None
+                "message": None,
+                "_created": time.time()
             }
 
         session = sessions[cid]
@@ -84,7 +96,8 @@ class DestinoCog(commands.Cog):
             sessions[cid] = {
                 "pool": [],
                 "result": [],
-                "message": None
+                "message": None,
+                "_created": time.time()
             }
             await interaction.followup.send("🎴 Destino resettato.")
             return
@@ -156,10 +169,19 @@ class DestinoCog(commands.Cog):
             try:
                 await session["message"].edit(embed=embed)
                 await interaction.followup.send("Aggiornato.", ephemeral=True)
-            except discord.NotFound:
+            except (discord.NotFound, discord.HTTPException):
                 # Messaggio originale eliminato o token scaduto (>15 min)
-                msg = await interaction.followup.send(embed=embed, wait=True)
-                session["message"] = msg
+                # HTTPException copre 401 Invalid Webhook Token, 50027, ecc.
+                try:
+                    msg = await interaction.followup.send(embed=embed, wait=True)
+                    session["message"] = msg
+                except (discord.NotFound, discord.HTTPException):
+                    # Anche il nuovo followup è fallito — sessione persa
+                    sessions.pop(cid, None)
+                    await interaction.followup.send(
+                        "⚠️ Sessione scaduta. Usa /destino per ricominciare.",
+                        ephemeral=True
+                    )
 
 
 async def setup(bot):

@@ -169,7 +169,7 @@ def parse_character(csv_text: str) -> dict:
     Returns a dict with keys: nome, livello, identita, tema, origine,
                                classe, abilita, immagine.
     """
-    grid = list(csv.reader(io.StringIO(csv_text)))
+    grid = list(csv.reader(io.StringIO(csv_text)))[:_MAX_CSV_ROWS + 1]
 
     # ── Simple fields ──────────────────────────────────────
     nome     = _find_value(grid, "NOME",      col_offset=2)

@@ -35,6 +35,7 @@ def _init_db():
                 origine      TEXT DEFAULT '',
                 tema         TEXT DEFAULT '',
                 descrizione  TEXT DEFAULT '',
+                livello      TEXT DEFAULT '',
                 classe       TEXT DEFAULT '',
                 abilita      TEXT DEFAULT '',
                 link         TEXT DEFAULT '',
@@ -43,6 +44,11 @@ def _init_db():
                 PRIMARY KEY (user_id, character_id)
             )
         """)
+        # Migrazione per database esistenti senza colonna livello
+        try:
+            conn.execute("ALTER TABLE characters ADD COLUMN livello TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # Colonna già esistente — ignoriamo
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gallery_config (
                 guild_id   TEXT PRIMARY KEY,
@@ -78,6 +84,7 @@ class CharacterData:
         self.origine = "Non impostata"
         self.tema = "Non impostato"
         self.descrizione = "Non impostata"
+        self.livello = ""
         self.classe = "Non impostata"
         self.abilita = ""
         self.link = ""
@@ -88,7 +95,7 @@ class CharacterData:
 def _row_to_obj(row: sqlite3.Row) -> CharacterData:
     obj = CharacterData(character_id=row["character_id"])
     for key in ("nome", "identita", "origine", "tema", "descrizione",
-                "classe", "abilita", "link", "immagine", "hex_color"):
+                "livello", "classe", "abilita", "link", "immagine", "hex_color"):
         setattr(obj, key, row[key])
     return obj
 
@@ -99,22 +106,34 @@ def create_embed(data: CharacterData) -> discord.Embed:
     except:
         color = discord.Color.blurple()
 
+    # Tronca i campi ai limiti ufficiali di Discord per evitare 400 Bad Request
+    title = (data.nome or "")[:256]
+
+    # Se non c'è descrizione, non mostrarla nell'embed
+    descrizione_raw = (data.descrizione or "").strip()
+    if descrizione_raw and descrizione_raw != "Non impostata":
+        description = descrizione_raw[:4096]
+    else:
+        description = None
+
     embed = discord.Embed(
-        title=data.nome,
-        description=data.descrizione,
+        title=title,
+        description=description,
         color=color
     )
 
-    embed.add_field(name="Identità", value=data.identita, inline=True)
-    embed.add_field(name="Origine", value=data.origine, inline=True)
-    embed.add_field(name="Tema", value=data.tema, inline=True)
-    embed.add_field(name="Classe", value=data.classe, inline=True)
+    embed.add_field(name="Identità", value=(data.identita or "—")[:1024], inline=True)
+    embed.add_field(name="Origine", value=(data.origine or "—")[:1024], inline=True)
+    embed.add_field(name="Tema", value=(data.tema or "—")[:1024], inline=True)
+    embed.add_field(name="Livello", value=(data.livello or "—")[:1024], inline=True)
+    embed.add_field(name="Classe", value=(data.classe or "—")[:1024], inline=True)
 
     if data.abilita:
-        embed.add_field(name="Eroiche", value=data.abilita, inline=False)
+        abilita_text = (data.abilita or "")[:1024]
+        embed.add_field(name="Eroiche", value=abilita_text, inline=False)
 
     if data.link:
-        embed.add_field(name="Scheda", value=data.link, inline=False)
+        embed.add_field(name="Scheda", value=(data.link or "")[:1024], inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
@@ -150,6 +169,7 @@ async def read_all() -> dict:
                     "origine": row["origine"],
                     "tema": row["tema"],
                     "descrizione": row["descrizione"],
+                    "livello": row["livello"],
                     "classe": row["classe"],
                     "abilita": row["abilita"],
                     "link": row["link"],
@@ -176,7 +196,6 @@ async def load_character(user_id, character_id=None) -> CharacterData | None:
                 ).fetchone()
                 return _row_to_obj(row) if row else None
             else:
-                # Return first character for user
                 row = conn.execute(
                     "SELECT * FROM characters WHERE user_id = ? ORDER BY rowid LIMIT 1",
                     (uid,)
@@ -213,12 +232,12 @@ async def save_character(user_id, obj: CharacterData):
                 conn.execute("""
                     INSERT OR REPLACE INTO characters
                         (user_id, character_id, nome, identita, origine, tema,
-                         descrizione, classe, abilita, link, immagine, hex_color)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         descrizione, livello, classe, abilita, link, immagine, hex_color)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     str(user_id), obj.character_id,
                     obj.nome, obj.identita, obj.origine, obj.tema,
-                    obj.descrizione, obj.classe, obj.abilita,
+                    obj.descrizione, obj.livello, obj.classe, obj.abilita,
                     obj.link, obj.immagine, obj.hex_color,
                 ))
                 conn.commit()
@@ -243,7 +262,6 @@ async def delete_character(user_id, character_id=None) -> bool:
                         (uid, character_id)
                     )
                 else:
-                    # Delete first character
                     cursor = conn.execute(
                         "DELETE FROM characters WHERE user_id = ? AND rowid IN ("
                         "SELECT rowid FROM characters WHERE user_id = ? LIMIT 1)",
@@ -300,12 +318,17 @@ def load_message_owners() -> dict[int, int]:
 
 
 async def save_message_owners(data: dict[int, int]):
-    """Salva i message_owners con INSERT OR REPLACE per ogni entry.
-    Usa list(data.items()) per evitare 'dictionary changed size during iteration'
-    se il dizionario viene modificato durante l'iterazione."""
+    """Save message_owners: insert/update existing entries,
+    and REMOVE those no longer in the dictionary."""
     def _save():
         conn = _get_connection()
         try:
+            existing = conn.execute("SELECT message_id FROM message_owners").fetchall()
+            current_ids = set(data.keys())
+            for row in existing:
+                if row["message_id"] not in current_ids:
+                    conn.execute("DELETE FROM message_owners WHERE message_id = ?", (row["message_id"],))
+
             conn.executemany(
                 "INSERT OR REPLACE INTO message_owners (message_id, user_id) VALUES (?, ?)",
                 [(mid, uid) for mid, uid in list(data.items())]
@@ -314,3 +337,15 @@ async def save_message_owners(data: dict[int, int]):
         finally:
             conn.close()
     await asyncio.to_thread(_save)
+
+
+async def delete_message_owner(message_id: int):
+    """Remove a single message_owner from the database."""
+    def _delete():
+        conn = _get_connection()
+        try:
+            conn.execute("DELETE FROM message_owners WHERE message_id = ?", (message_id,))
+            conn.commit()
+        finally:
+            conn.close()
+    await asyncio.to_thread(_delete)

@@ -16,6 +16,40 @@ from .gallery_store import get_gallery_channel
 
 
 # ─────────────────────────────────────────
+# Confirm Delete View
+# ─────────────────────────────────────────
+
+class ConfirmDeleteView(discord.ui.View):
+    def __init__(self, user, found_cid, found_name):
+        super().__init__(timeout=30)
+        self.user = user
+        self.found_cid = found_cid
+        self.found_name = found_name
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="SI", style=discord.ButtonStyle.danger)
+    async def si(self, i: discord.Interaction, b):
+        if i.user != self.user:
+            await i.response.defer()
+            return
+        await delete_character(i.user.id, self.found_cid)
+        await i.response.edit_message(
+            content=f"✅ Scheda **{self.found_name}** eliminata.",
+            view=None
+        )
+
+    @discord.ui.button(label="NO", style=discord.ButtonStyle.secondary)
+    async def no(self, i: discord.Interaction, b):
+        await i.response.edit_message(
+            content="Operazione annullata.",
+            view=None
+        )
+
+
+# ─────────────────────────────────────────
 # Cog
 # ─────────────────────────────────────────
 
@@ -67,26 +101,28 @@ class SchedaCog(commands.Cog):
 
         # 4. Validate parsed data (CSV vuoto o non valido)
         nome = parsed.get("nome", "Sconosciuto")
-        if nome == "Sconosciuto" and parsed.get("identita", "—") == "—":
+        identita = parsed.get("identita", "—")
+        origine = parsed.get("origine", "—")
+
+        if nome == "Sconosciuto" or (identita == "—" and origine == "—"):
             return await interaction.followup.send(
-                "❌ Il foglio Google Sheets sembra vuoto o non contiene una scheda valida. "
-                "Assicurati che il foglio abbia la struttura standard di Fabula Ultima.",
+                "❌ Il foglio Google Sheets non contiene una scheda valida. "
+                "Assicurati che il foglio abbia la struttura standard di Fabula Ultima "
+                "(almeno Nome e Identità o Origine compilati).",
                 ephemeral=True
             )
 
         # 5. Build CharacterData
         data = CharacterData()
         data.nome = nome
-        data.identita = parsed.get("identita", "—")
-        data.origine = parsed.get("origine", "—")
+        data.identita = identita
+        data.origine = origine
         data.tema = parsed.get("tema", "—")
+        data.livello = parsed.get("livello", "—")
         data.classe = parsed.get("classe", "—")
         data.abilita = parsed.get("abilita", "")
         data.immagine = parsed.get("immagine", None)
         data.link = url
-
-        livello = parsed.get("livello", "—")
-        data.descrizione = f"Livello: {livello}"
 
         # 6. Check if URL already exists for this user
         all_data = await read_all()
@@ -145,7 +181,6 @@ class SchedaCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # 1. Load existing character
         existing = await load_character(interaction.user.id, personaggio)
         if not existing:
             return await interaction.followup.send(
@@ -153,7 +188,6 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 2. Get the sheet URL
         url = existing.link
         if not url:
             return await interaction.followup.send(
@@ -161,7 +195,6 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 3. Extract sheet ID
         sheet_id = sheet.extract_sheet_id(url)
         if not sheet_id:
             return await interaction.followup.send(
@@ -169,7 +202,6 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 4. Fetch CSV
         try:
             csv_text = await sheet.fetch_csv(sheet_id)
         except ValueError as e:
@@ -180,7 +212,6 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 5. Parse
         try:
             parsed = sheet.parse_character(csv_text)
         except Exception as e:
@@ -189,27 +220,25 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 6. Validate parsed data
         nome = parsed.get("nome", "Sconosciuto")
-        if nome == "Sconosciuto" and parsed.get("identita", "—") == "—":
+        identita = parsed.get("identita", "—")
+        origine = parsed.get("origine", "—")
+
+        if nome == "Sconosciuto" or (identita == "—" and origine == "—"):
             return await interaction.followup.send(
-                "❌ Il foglio Google Sheets sembra vuoto. Nessun dato aggiornato.",
+                "❌ Il foglio Google Sheets non contiene dati validi. Aggiornamento annullato.",
                 ephemeral=True
             )
 
-        # 7. Update character data from sheet (preserve character_id, link, hex_color)
         existing.nome = nome
-        existing.identita = parsed.get("identita", existing.identita)
-        existing.origine = parsed.get("origine", existing.origine)
+        existing.identita = identita
+        existing.origine = origine
         existing.tema = parsed.get("tema", existing.tema)
+        existing.livello = parsed.get("livello", existing.livello)
         existing.classe = parsed.get("classe", existing.classe)
         existing.abilita = parsed.get("abilita", existing.abilita)
         existing.immagine = parsed.get("immagine", existing.immagine)
 
-        livello = parsed.get("livello", "—")
-        existing.descrizione = f"Livello: {livello}"
-
-        # 8. Save
         try:
             await save_character(interaction.user.id, existing)
         except Exception as e:
@@ -218,7 +247,6 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        # 9. Post to gallery if configured
         async def post_gallery():
             try:
                 if not interaction.guild:
@@ -237,77 +265,40 @@ class SchedaCog(commands.Cog):
 
         asyncio.create_task(post_gallery())
 
-        # 10. Ephemeral confirmation only (embed goes only to gallery)
         await interaction.followup.send("✅ Scheda aggiornata.", ephemeral=True)
 
     @discord.app_commands.command(
-        name="elimina",
-        description="Elimina la scheda caricata da un URL di Google Sheets."
+        name="elimina-scheda",
+        description="Elimina una scheda personaggio."
     )
     @discord.app_commands.describe(
-        url="URL del foglio Google Sheets usato per caricare la scheda"
+        personaggio="Nome del personaggio da eliminare"
     )
+    @discord.app_commands.autocomplete(personaggio=character_autocomplete)
     async def elimina(
         self,
         interaction: discord.Interaction,
-        url: str,
+        personaggio: str,
     ):
         await interaction.response.defer(ephemeral=True)
 
-        all_data = await read_all()
-        user_data = all_data.get(str(interaction.user.id), {})
-
-        url_clean = url.strip().rstrip("/")
-
-        found_cid = None
-        found_name = None
-        for cid, raw in user_data.items():
-            if raw.get("link", "").strip().rstrip("/") == url_clean:
-                found_cid = cid
-                found_name = raw.get("nome", "Sconosciuto")
-                break
-
-        if not found_cid:
+        existing = await load_character(interaction.user.id, personaggio)
+        if not existing:
             return await interaction.followup.send(
-                "❌ Nessuna scheda trovata per questo URL.",
+                "❌ Personaggio non trovato.",
                 ephemeral=True
             )
 
-        embed = discord.Embed(
+        embed_msg = discord.Embed(
             title="Conferma eliminazione",
-            description=f"Eliminare **{found_name}**?",
+            description=f"Eliminare **{existing.nome}**?",
             color=discord.Color.red()
         )
 
-        view = discord.ui.View(timeout=30)
-
-        async def si_handler(i: discord.Interaction):
-            if i.user != interaction.user:
-                await i.response.defer()
-                return
-            await delete_character(i.user.id, found_cid)
-            await i.response.edit_message(
-                content=f"✅ Scheda **{found_name}** eliminata.",
-                view=None
-            )
-
-        async def no_handler(i: discord.Interaction):
-            await i.response.edit_message(
-                content="Operazione annullata.",
-                view=None
-            )
-
-        si_btn = discord.ui.Button(label="SI", style=discord.ButtonStyle.danger)
-        no_btn = discord.ui.Button(label="NO", style=discord.ButtonStyle.secondary)
-
-        si_btn.callback = si_handler
-        no_btn.callback = no_handler
-
-        view.add_item(si_btn)
-        view.add_item(no_btn)
+        view = ConfirmDeleteView(interaction.user, existing.character_id, existing.nome)
 
         await interaction.followup.send(
-            embed=embed,
+            embed=embed_msg,
             view=view,
             ephemeral=True
         )

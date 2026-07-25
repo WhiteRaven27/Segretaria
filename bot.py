@@ -23,7 +23,7 @@ TOKEN = os.getenv("TOKEN")
 
 os.makedirs("data", exist_ok=True)
 
-from commands.message_owners_store import load_message_owners, save_message_owners
+from commands.message_owners_store import load_message_owners, save_message_owners, delete_message_owner
 
 # =========================
 # BOT
@@ -102,11 +102,12 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     # Only the owner can delete
     owner_id = bot.message_owners[message_id]
     if payload.user_id != owner_id:
-        # Remove unauthorized reaction
+        # Remove unauthorized reaction (usa get_member per evitare crash senza members intent)
         try:
             message = await channel.fetch_message(message_id)
-            member = payload.member or await channel.guild.fetch_member(payload.user_id)
-            await message.remove_reaction(payload.emoji, member)
+            member = payload.member or channel.guild.get_member(payload.user_id)
+            if member:
+                await message.remove_reaction(payload.emoji, member)
         except Exception:
             pass
         return
@@ -116,7 +117,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         message = await channel.fetch_message(message_id)
         await message.delete()
         del bot.message_owners[message_id]
-        await save_message_owners(bot.message_owners)
+        # Usa delete_message_owner per rimuovere solo questa riga dal DB
+        await delete_message_owner(message_id)
     except Exception as e:
         print(f"❌ Errore nel cancellare il messaggio: {e}")
 
