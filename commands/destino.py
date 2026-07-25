@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import random
 import time
 
@@ -10,26 +10,22 @@ sessions = {}
 _MAX_POOL_SIZE = 50
 # Timeout sessione in secondi (30 minuti)
 _SESSION_TIMEOUT = 30 * 60
-
-
-def _cleanup_sessions():
-    """Rimuove le sessioni scadute per evitare memory leak."""
-    now = time.time()
-    stale = [cid for cid, s in list(sessions.items()) if now - s.get("_created", now) > _SESSION_TIMEOUT]
-    for cid in stale:
-        sessions.pop(cid, None)
+# Limite massimo caratteri totali embed Discord
+_EMBED_TOTAL_CHAR_LIMIT = 6000
+# Soglia di sicurezza (lasciamo 200 di margine)
+_EMBED_SAFE_LIMIT = 5800
 
 
 def build_embed(cid):
     data = sessions.get(cid, {"pool": [], "result": []})
 
     embed = discord.Embed(
-        title="🎴 Destino",
-        description="Il mazzo è stato mescolato... il fato osserva in silenzio.",
+        title="Destino",
+        description="Il mazzo e' stato mescolato... il fato osserva in silenzio.",
         color=discord.Color.dark_purple()
     )
 
-    # partecipanti (tronca se troppo lungo per evitare 400 Bad Request)
+    # partecipanti (tronca se troppo lungo)
     pool_text = "\n".join(f"- {p}" for p in data["pool"]) if data["pool"] else "Nessuno"
     if len(pool_text) > 1024:
         pool_text = pool_text[:1021] + "..."
@@ -51,12 +47,48 @@ def build_embed(cid):
             inline=False
         )
 
+    # Verifica limite totale embed e tronca se necessario
+    total_len = len(str(embed.to_dict()))
+    if total_len > _EMBED_SAFE_LIMIT and data["pool"]:
+        pool_truncated = "\n".join(f"- {p}" for p in data["pool"][:15]) + "\n... e altri"
+        if len(pool_truncated) > 900:
+            pool_truncated = pool_truncated[:897] + "..."
+        embed.clear_fields()
+        embed.add_field(name="Partecipanti", value=pool_truncated, inline=False)
+        if data["result"]:
+            result_text = "\n".join(f"- {r}" for r in data["result"])
+            if len(result_text) > 900:
+                result_text = result_text[:897] + "..."
+            embed.add_field(name="Esito", value=result_text, inline=False)
+
     return embed
 
 
 class DestinoCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.cleanup_task.start()
+
+    def cog_unload(self):
+        self.cleanup_task.cancel()
+
+    @tasks.loop(minutes=5)
+    async def cleanup_task(self):
+        """Pulisce le sessioni scadute ogni 5 minuti."""
+        now = time.time()
+        stale = [
+            cid
+            for cid, s in list(sessions.items())
+            if now - s.get("_created", now) > _SESSION_TIMEOUT
+        ]
+        for cid in stale:
+            sessions.pop(cid, None)
+        if stale:
+            print(f"Pulite {len(stale)} sessioni destino scadute.")
+
+    @cleanup_task.before_loop
+    async def before_cleanup(self):
+        await self.bot.wait_until_ready()
 
     @discord.app_commands.command(
         name="destino",
@@ -99,32 +131,29 @@ class DestinoCog(commands.Cog):
                 "message": None,
                 "_created": time.time()
             }
-            await interaction.followup.send("🎴 Destino resettato.")
+            await interaction.followup.send("Destino resettato.")
             return
 
         # =====================
         # ADD
         # =====================
         if add:
-            # Usa virgola O newline come separatore, NON divide per spazi
-            # così i nomi composti (es. "Mario Rossi") restano interi
             names = [
                 n.strip()
                 for n in add.replace("\n", ",").split(",")
                 if n.strip()
             ]
-            # Limita il pool totale
             spazio_rimasto = _MAX_POOL_SIZE - len(session["pool"])
             if spazio_rimasto <= 0:
                 await interaction.followup.send(
-                    f"⚠️ Raggiunto il limite massimo di {_MAX_POOL_SIZE} partecipanti.",
+                    f" Raggiunto il limite massimo di {_MAX_POOL_SIZE} partecipanti.",
                     ephemeral=True
                 )
                 return
             if len(names) > spazio_rimasto:
                 names = names[:spazio_rimasto]
                 await interaction.followup.send(
-                    f"⚠️ Aggiunti solo {spazio_rimasto} partecipanti (limite {_MAX_POOL_SIZE}).",
+                    f" Aggiunti solo {spazio_rimasto} partecipanti (limite {_MAX_POOL_SIZE}).",
                     ephemeral=True
                 )
             session["pool"].extend(names)
@@ -135,7 +164,7 @@ class DestinoCog(commands.Cog):
         if draw is not None:
             if draw <= 0:
                 await interaction.followup.send(
-                    "❌ Il numero da pescare deve essere positivo.",
+                    " Il numero da pescare deve essere positivo.",
                     ephemeral=True
                 )
                 return
@@ -170,16 +199,13 @@ class DestinoCog(commands.Cog):
                 await session["message"].edit(embed=embed)
                 await interaction.followup.send("Aggiornato.", ephemeral=True)
             except (discord.NotFound, discord.HTTPException):
-                # Messaggio originale eliminato o token scaduto (>15 min)
-                # HTTPException copre 401 Invalid Webhook Token, 50027, ecc.
                 try:
                     msg = await interaction.followup.send(embed=embed, wait=True)
                     session["message"] = msg
                 except (discord.NotFound, discord.HTTPException):
-                    # Anche il nuovo followup è fallito — sessione persa
                     sessions.pop(cid, None)
                     await interaction.followup.send(
-                        "⚠️ Sessione scaduta. Usa /destino per ricominciare.",
+                        " Sessione scaduta. Usa /destino per ricominciare.",
                         ephemeral=True
                     )
 

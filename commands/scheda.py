@@ -10,6 +10,7 @@ from .character_data import (
     delete_character,
     read_all,
     load_character,
+    save_message_owners,
 )
 from .character import character_autocomplete
 from .gallery_store import get_gallery_channel
@@ -37,7 +38,7 @@ class ConfirmDeleteView(discord.ui.View):
             return
         await delete_character(i.user.id, self.found_cid)
         await i.response.edit_message(
-            content=f"✅ Scheda **{self.found_name}** eliminata.",
+            content=f"Scheda **{self.found_name}** eliminata.",
             view=None
         )
 
@@ -75,7 +76,7 @@ class SchedaCog(commands.Cog):
         sheet_id = sheet.extract_sheet_id(url)
         if not sheet_id:
             return await interaction.followup.send(
-                "❌ URL non valido. Assicurati di aver copiato l'intero link del foglio Google Sheets.",
+                "URL non valido. Assicurati di aver copiato l'intero link del foglio Google Sheets.",
                 ephemeral=True
             )
 
@@ -83,10 +84,10 @@ class SchedaCog(commands.Cog):
         try:
             csv_text = await sheet.fetch_csv(sheet_id)
         except ValueError as e:
-            return await interaction.followup.send(f"❌ {str(e)}", ephemeral=True)
+            return await interaction.followup.send(str(e), ephemeral=True)
         except Exception as e:
             return await interaction.followup.send(
-                f"❌ Errore durante il download: {str(e)}",
+                "Errore durante il download: " + str(e),
                 ephemeral=True
             )
 
@@ -95,20 +96,20 @@ class SchedaCog(commands.Cog):
             parsed = sheet.parse_character(csv_text)
         except Exception as e:
             return await interaction.followup.send(
-                f"❌ Errore durante il parsing della scheda: {str(e)}",
+                "Errore durante il parsing della scheda: " + str(e),
                 ephemeral=True
             )
 
         # 4. Validate parsed data (CSV vuoto o non valido)
         nome = parsed.get("nome", "Sconosciuto")
-        identita = parsed.get("identita", "—")
-        origine = parsed.get("origine", "—")
+        identita = parsed.get("identita", "\u2014")
+        origine = parsed.get("origine", "\u2014")
 
-        if nome == "Sconosciuto" or (identita == "—" and origine == "—"):
+        if nome == "Sconosciuto" or (identita == "\u2014" and origine == "\u2014"):
             return await interaction.followup.send(
-                "❌ Il foglio Google Sheets non contiene una scheda valida. "
+                "Il foglio Google Sheets non contiene una scheda valida. "
                 "Assicurati che il foglio abbia la struttura standard di Fabula Ultima "
-                "(almeno Nome e Identità o Origine compilati).",
+                "(almeno Nome e Identit\u00e0 o Origine compilati).",
                 ephemeral=True
             )
 
@@ -117,9 +118,9 @@ class SchedaCog(commands.Cog):
         data.nome = nome
         data.identita = identita
         data.origine = origine
-        data.tema = parsed.get("tema", "—")
-        data.livello = parsed.get("livello", "—")
-        data.classe = parsed.get("classe", "—")
+        data.tema = parsed.get("tema", "\u2014")
+        data.livello = parsed.get("livello", "\u2014")
+        data.classe = parsed.get("classe", "\u2014")
         data.abilita = parsed.get("abilita", "")
         data.immagine = parsed.get("immagine", None)
         data.link = url
@@ -131,7 +132,7 @@ class SchedaCog(commands.Cog):
         for cid, raw in user_data.items():
             if raw.get("link", "").strip().rstrip("/") == url_clean:
                 return await interaction.followup.send(
-                    "⚠️ Scheda già presente, usa il comando /aggiorna.",
+                    "Scheda gi\u00e0 presente, usa il comando /aggiorna.",
                     ephemeral=True
                 )
 
@@ -140,7 +141,7 @@ class SchedaCog(commands.Cog):
             await save_character(interaction.user.id, data)
         except Exception as e:
             return await interaction.followup.send(
-                f"❌ Errore nel salvataggio: {str(e)}",
+                "Errore nel salvataggio: " + str(e),
                 ephemeral=True
             )
 
@@ -154,17 +155,20 @@ class SchedaCog(commands.Cog):
                     return
                 ch = self.bot.get_channel(cid)
                 if ch:
-                    await ch.send(
-                        content=f"Scheda di {interaction.user.mention}",
+                    msg = await ch.send(
+                        content="Scheda di " + interaction.user.mention,
                         embed=create_embed(data)
                     )
+                    # Traccia per permettere cancellazione con reazione X
+                    self.bot.message_owners[msg.id] = interaction.user.id
+                    await save_message_owners(self.bot.message_owners)
             except Exception as e:
-                print(f"❌ Errore nel post gallery: {e}")
+                print("Errore nel post gallery:", e)
 
         asyncio.create_task(post_gallery())
 
         # 9. Ephemeral confirmation only (embed goes only to gallery)
-        await interaction.followup.send("✅ Scheda caricata.", ephemeral=True)
+        await interaction.followup.send("Scheda caricata.", ephemeral=True)
 
     @discord.app_commands.command(
         name="aggiorna",
@@ -184,31 +188,31 @@ class SchedaCog(commands.Cog):
         existing = await load_character(interaction.user.id, personaggio)
         if not existing:
             return await interaction.followup.send(
-                "❌ Personaggio non trovato.",
+                "Personaggio non trovato.",
                 ephemeral=True
             )
 
         url = existing.link
         if not url:
             return await interaction.followup.send(
-                "❌ Questo personaggio non ha un link Google Sheets associato. Impossibile aggiornare.",
+                "Questo personaggio non ha un link Google Sheets associato. Impossibile aggiornare.",
                 ephemeral=True
             )
 
         sheet_id = sheet.extract_sheet_id(url)
         if not sheet_id:
             return await interaction.followup.send(
-                "❌ URL del foglio non valido salvato nella scheda.",
+                "URL del foglio non valido salvato nella scheda.",
                 ephemeral=True
             )
 
         try:
             csv_text = await sheet.fetch_csv(sheet_id)
         except ValueError as e:
-            return await interaction.followup.send(f"❌ {str(e)}", ephemeral=True)
+            return await interaction.followup.send(str(e), ephemeral=True)
         except Exception as e:
             return await interaction.followup.send(
-                f"❌ Errore durante il download: {str(e)}",
+                "Errore durante il download: " + str(e),
                 ephemeral=True
             )
 
@@ -216,17 +220,17 @@ class SchedaCog(commands.Cog):
             parsed = sheet.parse_character(csv_text)
         except Exception as e:
             return await interaction.followup.send(
-                f"❌ Errore durante il parsing della scheda: {str(e)}",
+                "Errore durante il parsing della scheda: " + str(e),
                 ephemeral=True
             )
 
         nome = parsed.get("nome", "Sconosciuto")
-        identita = parsed.get("identita", "—")
-        origine = parsed.get("origine", "—")
+        identita = parsed.get("identita", "\u2014")
+        origine = parsed.get("origine", "\u2014")
 
-        if nome == "Sconosciuto" or (identita == "—" and origine == "—"):
+        if nome == "Sconosciuto" or (identita == "\u2014" and origine == "\u2014"):
             return await interaction.followup.send(
-                "❌ Il foglio Google Sheets non contiene dati validi. Aggiornamento annullato.",
+                "Il foglio Google Sheets non contiene dati validi. Aggiornamento annullato.",
                 ephemeral=True
             )
 
@@ -243,7 +247,7 @@ class SchedaCog(commands.Cog):
             await save_character(interaction.user.id, existing)
         except Exception as e:
             return await interaction.followup.send(
-                f"❌ Errore nel salvataggio: {str(e)}",
+                "Errore nel salvataggio: " + str(e),
                 ephemeral=True
             )
 
@@ -256,16 +260,19 @@ class SchedaCog(commands.Cog):
                     return
                 ch = self.bot.get_channel(cid)
                 if ch:
-                    await ch.send(
-                        content=f"Scheda aggiornata di {interaction.user.mention}",
+                    msg = await ch.send(
+                        content="Scheda aggiornata di " + interaction.user.mention,
                         embed=create_embed(existing)
                     )
+                    # Traccia per permettere cancellazione con reazione X
+                    self.bot.message_owners[msg.id] = interaction.user.id
+                    await save_message_owners(self.bot.message_owners)
             except Exception as e:
-                print(f"❌ Errore nel post gallery: {e}")
+                print("Errore nel post gallery:", e)
 
         asyncio.create_task(post_gallery())
 
-        await interaction.followup.send("✅ Scheda aggiornata.", ephemeral=True)
+        await interaction.followup.send("Scheda aggiornata.", ephemeral=True)
 
     @discord.app_commands.command(
         name="elimina-scheda",
@@ -285,13 +292,13 @@ class SchedaCog(commands.Cog):
         existing = await load_character(interaction.user.id, personaggio)
         if not existing:
             return await interaction.followup.send(
-                "❌ Personaggio non trovato.",
+                "Personaggio non trovato.",
                 ephemeral=True
             )
 
         embed_msg = discord.Embed(
             title="Conferma eliminazione",
-            description=f"Eliminare **{existing.nome}**?",
+            description="Eliminare **" + existing.nome + "**?",
             color=discord.Color.red()
         )
 

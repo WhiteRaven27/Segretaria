@@ -37,7 +37,7 @@ pip install -r requirements.txt
 
 5. **Avvia il bot:**
 ```bash
-python main.py  # Sostituisci con il nome del file principale
+python bot.py
 ```
 
 ## Ottenere un token Discord
