@@ -78,6 +78,7 @@ async def fetch_csv(sheet_id: str) -> str:
 # Words that are labels/headers, not ability names
 _SKIP_ABILITA = {
     "", "abilità eroiche", "nome orologio", "  classe", "classe",
+    "★ classe", "★classe",
     "passive", "pv bar", "pm bar", "pi bar", "testo crisi",
     "vero", "falso", "true", "false", "nome", "lvl", "livello",
     "identità", "origine", "tema", "image url", "pronomi",
@@ -190,7 +191,10 @@ def parse_character(csv_text: str) -> dict:
     classi = []
     for r, row in enumerate(grid):
         for c, cell in enumerate(row):
-            if cell.strip().lower() not in ("classe", "  classe"):
+            # Remove the star character that appears when class level >= 10
+            # Google Sheets formula: =IF(AX4>=10, "★ CLASSE", "  CLASSE")
+            cell_clean = cell.strip().lower().replace("★", "").replace("*", "").strip()
+            if cell_clean not in ("classe", "  classe"):
                 continue
             class_name  = _cell(grid, r, c + _CLASSE_NAME_OFFSET)
             class_level = _cell(grid, r, c + _CLASSE_LEVEL_OFFSET)
