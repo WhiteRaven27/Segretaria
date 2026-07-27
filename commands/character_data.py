@@ -52,14 +52,14 @@ def validate_character_id(character_id):
 class CharacterData:
     def __init__(self, character_id=None):
         self.character_id = character_id or str(uuid.uuid4())[:8]
-        self.nome = "Non impostato"
-        self.livello = "—"
-        self.identita = "Non impostata"
-        self.origine = "Non impostata"
-        self.tema = "Non impostato"
-        self.classe = "Non impostata"
-        self.abilita = ""
-        self.immagine = None
+        self.nome      = "Non impostato"
+        self.livello   = "—"
+        self.identita  = "Non impostata"
+        self.origine   = "Non impostata"
+        self.tema      = "Non impostato"
+        self.classe    = "Non impostata"
+        self.abilita   = ""
+        self.immagine  = None
         self.hex_color = "#5865F2"
         self.sheet_url = None
 
@@ -72,14 +72,20 @@ def create_embed(data: CharacterData):
 
     embed = discord.Embed(title=data.nome, color=color)
 
-    embed.add_field(name="Livello",   value=getattr(data, "livello",  "—") or "—", inline=True)
-    embed.add_field(name="Identità",  value=data.identita, inline=True)
-    embed.add_field(name="Origine",   value=data.origine,  inline=True)
-    embed.add_field(name="Tema",      value=data.tema,     inline=True)
-    embed.add_field(name="Classe",    value=data.classe,   inline=False)
+    # Field order: Identità · Origine · Tema · Livello · Classe · Abilità · Sheet
+    embed.add_field(name="Identità", value=data.identita or "—", inline=True)
+    embed.add_field(name="Origine",  value=data.origine  or "—", inline=True)
+    embed.add_field(name="Tema",     value=data.tema     or "—", inline=True)
+    embed.add_field(name="Livello",  value=getattr(data, "livello", "—") or "—", inline=True)
+    embed.add_field(name="Classe",   value=data.classe   or "—", inline=False)
 
-    if data.abilita:
-        embed.add_field(name="Abilità Eroiche", value=data.abilita, inline=False)
+    abilita = getattr(data, "abilita", "")
+    if abilita:
+        embed.add_field(name="Abilità Eroiche", value=abilita, inline=False)
+
+    sheet_url = getattr(data, "sheet_url", None)
+    if sheet_url:
+        embed.add_field(name="Foglio", value=f"[Apri il foglio]({sheet_url})", inline=False)
 
     if data.immagine:
         embed.set_image(url=data.immagine)
@@ -96,13 +102,18 @@ async def load_character(user_id, character_id=None):
         return None
 
     if character_id:
-        if not validate_character_id(character_id):
-            return None
+        # Try as a character_id first (autocomplete path)
+        if validate_character_id(character_id):
+            raw = user_chars.get(character_id)
+            if raw:
+                return _to_obj(character_id, raw)
 
-        raw = user_chars.get(character_id)
-        if not raw:
-            return None
-        return _to_obj(character_id, raw)
+        # Fallback: match by name (manual-typing path)
+        for cid, raw in user_chars.items():
+            if raw.get("nome", "").lower() == character_id.lower():
+                return _to_obj(cid, raw)
+
+        return None
 
     first_id = next(iter(user_chars))
     return _to_obj(first_id, user_chars[first_id])
@@ -139,7 +150,7 @@ async def save_character(user_id, obj):
             "origine":   obj.origine,
             "tema":      obj.tema,
             "classe":    obj.classe,
-            "abilita":   obj.abilita,
+            "abilita":   getattr(obj, "abilita",   ""),
             "immagine":  obj.immagine,
             "hex_color": obj.hex_color,
             "sheet_url": getattr(obj, "sheet_url", None),

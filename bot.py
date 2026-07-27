@@ -85,8 +85,8 @@ async def on_app_command_error(
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     """Allow users to delete their own character sheet messages with ❌ reaction"""
-    # Ignore bot reactions
-    if payload.user_id == bot.user.id:
+    # Ignore bot reactions (guard against bot.user being None during startup)
+    if bot.user is None or payload.user_id == bot.user.id:
         return
 
     # Only handle ❌ emoji
@@ -108,8 +108,12 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         # Remove unauthorized reaction
         try:
             message = await channel.fetch_message(message_id)
-            member = payload.member or await channel.guild.fetch_member(payload.user_id)
-            await message.remove_reaction(payload.emoji, member)
+            guild = getattr(channel, "guild", None)
+            member = payload.member or (
+                await guild.fetch_member(payload.user_id) if guild else None
+            )
+            if member:
+                await message.remove_reaction(payload.emoji, member)
         except Exception:
             pass
         return
@@ -137,6 +141,7 @@ async def load_cogs():
             and filename != "message_owners_store.py"
             and filename != "character.py"
             and filename != "sheet.py"
+            and filename != "gallery_store.py"
         ):
             try:
                 await bot.load_extension(

@@ -41,21 +41,43 @@ class ShowConfirm(discord.ui.View):
         self.embed = embed
         self.bot = bot
 
+    async def on_error(self, i: discord.Interaction, error: Exception, item) -> None:
+        print(f"❌ ShowConfirm error: {error}")
+        try:
+            await i.response.send_message("Errore interno. Riprova.", ephemeral=True)
+        except Exception:
+            pass
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+
     @discord.ui.button(label="SI", style=discord.ButtonStyle.success)
     async def si(self, i: discord.Interaction, b):
         if i.user != self.user:
             await i.response.defer()
             return
 
-        msg = await i.channel.send(
-            content=f"Scheda di {self.user.mention}",
-            embed=self.embed,
-        )
+        channel = i.channel
+        if channel is None:
+            await i.response.edit_message(content="Canale non disponibile.", view=None)
+            return
 
-        self.bot.message_owners[msg.id] = self.user.id
-        await save_message_owners(self.bot.message_owners)
-
-        await i.response.edit_message(content="Pubblicato.", view=None)
+        try:
+            msg = await channel.send(
+                content=f"Scheda di {self.user.mention}",
+                embed=self.embed,
+            )
+            self.bot.message_owners[msg.id] = self.user.id
+            await save_message_owners(self.bot.message_owners)
+            await i.response.edit_message(content="Pubblicato.", view=None)
+        except discord.Forbidden:
+            await i.response.edit_message(
+                content="Non ho i permessi per inviare messaggi in questo canale.", view=None
+            )
+        except Exception as e:
+            print(f"❌ Errore ShowConfirm.si: {e}")
+            await i.response.edit_message(content="Errore nell'invio. Riprova.", view=None)
 
     @discord.ui.button(label="NO", style=discord.ButtonStyle.danger)
     async def no(self, i: discord.Interaction, b):
@@ -72,6 +94,17 @@ class ConfirmDelete(discord.ui.View):
         self.user = user
         self.cid = cid
 
+    async def on_error(self, i: discord.Interaction, error: Exception, item) -> None:
+        print(f"❌ ConfirmDelete error: {error}")
+        try:
+            await i.response.send_message("Errore interno. Riprova.", ephemeral=True)
+        except Exception:
+            pass
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+
     @discord.ui.button(label="SI", style=discord.ButtonStyle.danger)
     async def si(self, i: discord.Interaction, b):
         if i.user != self.user:
@@ -82,8 +115,12 @@ class ConfirmDelete(discord.ui.View):
             await i.response.edit_message(content="ID personaggio non valido.", view=None)
             return
 
-        await delete_character(i.user.id, self.cid)
-        await i.response.edit_message(content="Personaggio eliminato.", view=None)
+        try:
+            await delete_character(i.user.id, self.cid)
+            await i.response.edit_message(content="Personaggio eliminato.", view=None)
+        except Exception as e:
+            print(f"❌ Errore ConfirmDelete.si: {e}")
+            await i.response.edit_message(content="Errore durante l'eliminazione. Riprova.", view=None)
 
     @discord.ui.button(label="NO", style=discord.ButtonStyle.secondary)
     async def no(self, i: discord.Interaction, b):

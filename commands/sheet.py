@@ -10,11 +10,24 @@ import urllib.error
 # ─────────────────────────────────────────
 
 _ID_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9_-]+)")
+HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 
 def extract_sheet_id(url: str) -> str | None:
     m = _ID_RE.search(url)
     return m.group(1) if m else None
+
+
+def normalize_hex(value: str | None) -> str | None:
+    """Validate and normalise a hex colour string. Returns upper-case #RRGGBB or None."""
+    if not value:
+        return None
+    value = value.strip()
+    if not HEX_RE.match(value):
+        return None
+    if len(value) == 4:                          # expand #RGB → #RRGGBB
+        value = "#" + "".join(c * 2 for c in value[1:])
+    return value.upper()
 
 
 # ─────────────────────────────────────────
@@ -26,7 +39,7 @@ def _fetch_csv_sync(sheet_id: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read().decode("utf-8")
+            content = resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         raise ValueError(
             f"Impossibile accedere al foglio (HTTP {e.code}). "
@@ -35,6 +48,18 @@ def _fetch_csv_sync(sheet_id: str) -> str:
         )
     except urllib.error.URLError as e:
         raise ValueError(f"Errore di rete: {e.reason}")
+    except Exception as e:
+        raise ValueError(f"Errore nel recupero del foglio: {e}")
+
+    # Google returns HTTP 200 + an HTML login page when the sheet is private.
+    # Detect this before the CSV parser silently produces garbage data.
+    if content.lstrip().startswith("<"):
+        raise ValueError(
+            "Il foglio non è accessibile pubblicamente. "
+            "Vai su Condividi → 'Chiunque abbia il link' → Visualizzatore e riprova."
+        )
+
+    return content
 
 
 async def fetch_csv(sheet_id: str) -> str:
@@ -46,19 +71,34 @@ async def fetch_csv(sheet_id: str) -> str:
 # Parsing helpers
 # ─────────────────────────────────────────
 
-# Labels that appear in the abilità column but are section headers, not abilities
+# Words that are labels/headers, not ability names
 _SKIP_ABILITA = {
     "", "abilità eroiche", "nome orologio", "  classe", "classe",
     "passive", "pv bar", "pm bar", "pi bar", "testo crisi",
-    "vero", "falso", "true", "false",
+    "vero", "falso", "true", "false", "nome", "lvl", "livello",
+    "identità", "origine", "tema", "image url", "pronomi",
 }
 
-# Column indices (0-based) in the CSV
-_ABILITA_NAME_COL = 41   # column AP
-_ABILITA_COUNT_COL = 46  # column AU
+# Abilità eroiche: exact (row_0idx, col_start_0idx, col_end_0idx inclusive)
+# Rows are 0-based (spreadsheet row 10 → index 9)
+# Columns: AV=47, BH=59, BP=67, CB=79
+_ABILITA_BLOCKS = [
+    (9,  47, 59),   # AV10:BH10
+    (17, 47, 59),   # AV18:BH18
+    (25, 47, 59),   # AV26:BH26
+    (33, 47, 59),   # AV34:BH34
+    (19, 67, 79),   # BP20:CB20
+    (26, 67, 79),   # BP27:CB27
+    (33, 67, 79),   # BP34:CB34
+]
 
-# Offset from a CLASSE label cell to: class name (+2), class level (+8)
-_CLASSE_NAME_OFFSET = 2
+# Tema: M8:Q8 → row index 7, cols 12–16
+_TEMA_ROW   = 7
+_TEMA_START = 12   # M
+_TEMA_END   = 16   # Q
+
+# Offset from a CLASSE label to: class name (+2), class level (+8)
+_CLASSE_NAME_OFFSET  = 2
 _CLASSE_LEVEL_OFFSET = 8
 
 
@@ -94,6 +134,27 @@ def _find_value(
     return ""
 
 
+def _scan_row_range(grid: list[list[str]], row: int, c_start: int, c_end: int) -> list[str]:
+    """Return all non-empty, non-numeric, non-label strings in grid[row][c_start:c_end+1]."""
+    if row >= len(grid):
+        return []
+    results = []
+    row_data = grid[row]
+    for c in range(c_start, min(c_end + 1, len(row_data))):
+        val = row_data[c].strip()
+        if not val:
+            continue
+        if val.lower() in _SKIP_ABILITA:
+            continue
+        # skip pure numbers and single-char values that are likely checkboxes/flags
+        if val.replace(".", "").replace(",", "").isdigit():
+            continue
+        if len(val) <= 1:
+            continue
+        results.append(val)
+    return results
+
+
 # ─────────────────────────────────────────
 # Main parser
 # ─────────────────────────────────────────
@@ -110,9 +171,16 @@ def parse_character(csv_text: str) -> dict:
     nome     = _find_value(grid, "NOME",      col_offset=2)
     livello  = _find_value(grid, "LVL",       col_offset=2, unique_neighbor="Identità")
     identita = _find_value(grid, "Identità",  col_offset=3)
-    tema     = _find_value(grid, "Tema",      col_offset=2)
     origine  = _find_value(grid, "Origine",   col_offset=2)
     immagine = _find_value(grid, "IMAGE URL", col_offset=3)
+
+    # ── Tema: scan M8:Q8 (row 7, cols 12–16) ──────────────
+    tema = ""
+    for c in range(_TEMA_START, min(_TEMA_END + 1, len(grid[_TEMA_ROW]) if _TEMA_ROW < len(grid) else 0)):
+        val = _cell(grid, _TEMA_ROW, c)
+        if val and val.lower() not in _SKIP_ABILITA and not val.replace(".", "").isdigit():
+            tema = val
+            break
 
     # ── Classes ────────────────────────────────────────────
     classi = []
@@ -132,20 +200,14 @@ def parse_character(csv_text: str) -> dict:
 
     classe = ", ".join(classi) if classi else ""
 
-    # ── Abilità eroiche ────────────────────────────────────
+    # ── Abilità eroiche: fixed cell blocks ─────────────────
     abilita_list = []
-    for r, row in enumerate(grid):
-        if len(row) <= _ABILITA_NAME_COL:
-            continue
-        name = row[_ABILITA_NAME_COL].strip()
-        if not name or name.lower() in _SKIP_ABILITA:
-            continue
-        count_raw = _cell(grid, r, _ABILITA_COUNT_COL)
-        try:
-            if int(count_raw) > 0:
-                abilita_list.append(f"{name} (x{count_raw})")
-        except ValueError:
-            pass
+    seen = set()
+    for (row, c_start, c_end) in _ABILITA_BLOCKS:
+        for name in _scan_row_range(grid, row, c_start, c_end):
+            if name not in seen:
+                seen.add(name)
+                abilita_list.append(name)
 
     abilita = "\n".join(abilita_list)
 
