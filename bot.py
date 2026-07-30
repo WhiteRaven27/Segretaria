@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import traceback
+import sys
 
 from dotenv import load_dotenv
 import discord
@@ -13,7 +14,8 @@ from discord.ext import commands
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+# Riduci il logging a WARNING per ridurre I/O e overhead su Termux
+logging.basicConfig(level=logging.WARNING)
 
 TOKEN = os.getenv("TOKEN")
 
@@ -30,6 +32,8 @@ from commands.message_owners_store import load_message_owners, save_message_owne
 # =========================
 
 intents = discord.Intents.default()
+# Abilita Message Content Intent per leggere il contenuto dei messaggi
+intents.message_content = True
 # Nota: intents.members NON abilitato per evitare crash all'avvio
 # (il bot richiederebbe Server Members Intent nel Developer Portal)
 # on_raw_reaction_add fornisce già payload.member via API
@@ -172,24 +176,60 @@ async def on_ready():
     print(f"Connesso come {bot.user}")
     
 # =========================
-# MAIN
+# MAIN con exponential backoff
 # =========================
 
 async def main():
-
     if not TOKEN:
-        print(
-            "❌ TOKEN non trovato nel file .env"
-        )
+        print("❌ TOKEN non trovato nel file .env")
         return
 
-    async with bot:
-        await load_cogs()
-        await bot.start(TOKEN)
+    # Parametri di reconnect con exponential backoff
+    max_retries = 10
+    base_delay = 5       # secondi
+    max_delay = 300      # 5 minuti massimo
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with bot:
+                await load_cogs()
+                await bot.start(TOKEN)
+            # Se bot.start() termina senza eccezioni, usciamo
+            break
+        except discord.LoginFailure:
+            print("❌ Token non valido. Verifica il file .env.")
+            return
+        except discord.PrivilegedIntentsRequired:
+            print("❌ Intenti privilegiati non abilitati nel Developer Portal.")
+            return
+        except (discord.ConnectionClosed, discord.GatewayNotFound,
+                discord.HTTPException, ConnectionResetError,
+                asyncio.TimeoutError, OSError) as e:
+            delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+            print(f"⚠️ Connessione persa ({type(e).__name__}). "
+                  f"Tentativo {attempt}/{max_retries} tra {delay}s...")
+            print(f"   Errore: {e}")
+            if attempt < max_retries:
+                await asyncio.sleep(delay)
+            else:
+                print("❌ Raggiunto il numero massimo di tentativi di riconnessione.")
+                raise
+        except Exception as e:
+            print(f"❌ Errore imprevisto: {e}")
+            traceback.print_exc()
+            raise
 
 # =========================
 # START
 # =========================
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Bot arrestato manualmente.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ Errore fatale: {e}")
+        traceback.print_exc()
+        sys.exit(1)
