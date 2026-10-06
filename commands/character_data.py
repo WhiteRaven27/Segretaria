@@ -83,6 +83,7 @@ def _init_db():
             livello      TEXT DEFAULT '',
             classe       TEXT DEFAULT '',
             abilita      TEXT DEFAULT '',
+            peculiarita  TEXT DEFAULT '',
             link         TEXT DEFAULT '',
             immagine     TEXT DEFAULT NULL,
             hex_color    TEXT DEFAULT '#5865F2',
@@ -92,6 +93,11 @@ def _init_db():
     # Migrazione per database esistenti senza colonna livello
     try:
         conn.execute("ALTER TABLE characters ADD COLUMN livello TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Colonna già esistente — ignoriamo
+    # Migrazione per aggiungere la colonna peculiarita
+    try:
+        conn.execute("ALTER TABLE characters ADD COLUMN peculiarita TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass  # Colonna già esistente — ignoriamo
     conn.execute("""
@@ -130,6 +136,7 @@ class CharacterData:
         self.livello = ""
         self.classe = "Non impostata"
         self.abilita = ""
+        self.peculiarita = ""
         self.link = ""
         self.immagine = None
         self.hex_color = "#5865F2"
@@ -138,7 +145,7 @@ class CharacterData:
 def _row_to_obj(row: sqlite3.Row) -> CharacterData:
     obj = CharacterData(character_id=row["character_id"])
     for key in ("nome", "identita", "origine", "tema", "descrizione",
-                "livello", "classe", "abilita", "link", "immagine", "hex_color"):
+                "livello", "classe", "abilita", "peculiarita", "link", "immagine", "hex_color"):
         setattr(obj, key, row[key])
     return obj
 
@@ -174,6 +181,10 @@ def create_embed(data: CharacterData) -> discord.Embed:
     if data.abilita:
         abilita_text = (data.abilita or "")[:1024]
         embed.add_field(name="Eroiche", value=abilita_text, inline=False)
+
+    if data.peculiarita:
+        peculiarita_text = (data.peculiarita or "")[:1024]
+        embed.add_field(name="Peculiarità", value=peculiarita_text, inline=False)
 
     if data.link:
         embed.add_field(name="Scheda", value=(data.link or "")[:1024], inline=False)
@@ -214,6 +225,7 @@ async def read_all() -> dict:
                 "livello": row["livello"],
                 "classe": row["classe"],
                 "abilita": row["abilita"],
+                "peculiarita": row["peculiarita"],
                 "link": row["link"],
                 "immagine": row["immagine"],
                 "hex_color": row["hex_color"],
@@ -265,13 +277,13 @@ async def save_character(user_id, obj: CharacterData):
             conn.execute("""
                 INSERT OR REPLACE INTO characters
                     (user_id, character_id, nome, identita, origine, tema,
-                     descrizione, livello, classe, abilita, link, immagine, hex_color)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     descrizione, livello, classe, abilita, peculiarita, link, immagine, hex_color)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 str(user_id), obj.character_id,
                 obj.nome, obj.identita, obj.origine, obj.tema,
                 obj.descrizione, obj.livello, obj.classe, obj.abilita,
-                obj.link, obj.immagine, obj.hex_color,
+                obj.peculiarita, obj.link, obj.immagine, obj.hex_color,
             ))
             conn.commit()
 
