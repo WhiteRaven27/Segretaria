@@ -185,7 +185,7 @@ def create_embed(data: CharacterData) -> discord.Embed:
     embed.add_field(name="Livello", value=(data.livello or "—")[:1024], inline=True)
     embed.add_field(name="Classe", value=(data.classe or "—")[:1024], inline=True)
 
-    # Eroiche e Peculiarità side by side (inline=True)
+    # Eroiche e Peculiarità side by side (inline=True) — BEFORE inline=False fields
     if data.abilita:
         abilita_text = (data.abilita or "")[:1024]
         embed.add_field(name="Eroiche", value=abilita_text, inline=True)
@@ -194,6 +194,7 @@ def create_embed(data: CharacterData) -> discord.Embed:
         peculiarita_text = (data.peculiarita or "")[:1024]
         embed.add_field(name="Peculiarità", value=peculiarita_text, inline=True)
 
+    # Full-width fields AFTER inline fields
     if data.link:
         embed.add_field(name="Scheda", value=(data.link or "")[:1024], inline=False)
 
