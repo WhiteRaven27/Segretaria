@@ -102,14 +102,14 @@ class SchedaCog(commands.Cog):
 
         # 4. Validate parsed data (CSV vuoto o non valido)
         nome = parsed.get("nome", "Sconosciuto")
-        identita = parsed.get("identita", "\u2014")
-        origine = parsed.get("origine", "\u2014")
+        identita = parsed.get("identita", "—")
+        origine = parsed.get("origine", "—")
 
-        if nome == "Sconosciuto" or (identita == "\u2014" and origine == "\u2014"):
+        if nome == "Sconosciuto" or (identita == "—" and origine == "—"):
             return await interaction.followup.send(
                 "Il foglio Google Sheets non contiene una scheda valida. "
                 "Assicurati che il foglio abbia la struttura standard di Fabula Ultima "
-                "(almeno Nome e Identit\u00e0 o Origine compilati).",
+                "(almeno Nome e Identità o Origine compilati).",
                 ephemeral=True
             )
 
@@ -118,10 +118,11 @@ class SchedaCog(commands.Cog):
         data.nome = nome
         data.identita = identita
         data.origine = origine
-        data.tema = parsed.get("tema", "\u2014")
-        data.livello = parsed.get("livello", "\u2014")
-        data.classe = parsed.get("classe", "\u2014")
+        data.tema = parsed.get("tema", "—")
+        data.livello = parsed.get("livello", "—")
+        data.classe = parsed.get("classe", "—")
         data.abilita = parsed.get("abilita", "")
+        data.peculiarita = parsed.get("peculiarita", "")
         data.immagine = parsed.get("immagine", None)
         data.link = url
 
@@ -132,7 +133,7 @@ class SchedaCog(commands.Cog):
         for cid, raw in user_data.items():
             if raw.get("link", "").strip().rstrip("/") == url_clean:
                 return await interaction.followup.send(
-                    "Scheda gi\u00e0 presente, usa il comando /aggiorna.",
+                    "Scheda già presente, usa il comando /aggiorna.",
                     ephemeral=True
                 )
 
@@ -225,10 +226,10 @@ class SchedaCog(commands.Cog):
             )
 
         nome = parsed.get("nome", "Sconosciuto")
-        identita = parsed.get("identita", "\u2014")
-        origine = parsed.get("origine", "\u2014")
+        identita = parsed.get("identita", "—")
+        origine = parsed.get("origine", "—")
 
-        if nome == "Sconosciuto" or (identita == "\u2014" and origine == "\u2014"):
+        if nome == "Sconosciuto" or (identita == "—" and origine == "—"):
             return await interaction.followup.send(
                 "Il foglio Google Sheets non contiene dati validi. Aggiornamento annullato.",
                 ephemeral=True
@@ -241,6 +242,7 @@ class SchedaCog(commands.Cog):
         existing.livello = parsed.get("livello", existing.livello)
         existing.classe = parsed.get("classe", existing.classe)
         existing.abilita = parsed.get("abilita", existing.abilita)
+        existing.peculiarita = parsed.get("peculiarita", existing.peculiarita)
         existing.immagine = parsed.get("immagine", existing.immagine)
 
         try:
