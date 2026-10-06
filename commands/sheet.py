@@ -102,7 +102,7 @@ _TEMA_ROW   = 7
 _TEMA_START = 12   # M
 _TEMA_END   = 16   # Q
 
-# Peculiarità: L12 (row index 11, col 11)
+# Peculiarità: Q12 (row index 11, col 16)
 _PECULIARITA_ROW = 11  # Row 12 in spreadsheet
 _PECULIARITA_COL = 16  # Q column (0-indexed)
 
@@ -192,6 +192,7 @@ def parse_character(csv_text: str) -> dict:
             break
 
     # ── Peculiarità: Q12 (row 11, col 16) ──────────────────
+    # This reads the value from L12 label area into Q12 value
     peculiarita = _cell(grid, _PECULIARITA_ROW, _PECULIARITA_COL)
 
     # ── Classes ────────────────────────────────────────────

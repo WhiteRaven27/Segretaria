@@ -179,13 +179,22 @@ def create_embed(data: CharacterData) -> discord.Embed:
         color=color
     )
 
+    # First row: Identità, Origine, Tema (inline)
     embed.add_field(name="Identità", value=(data.identita or "—")[:1024], inline=True)
     embed.add_field(name="Origine", value=(data.origine or "—")[:1024], inline=True)
     embed.add_field(name="Tema", value=(data.tema or "—")[:1024], inline=True)
+
+    # Second row: Livello and Classe on same row (inline)
+
     embed.add_field(name="Livello", value=(data.livello or "—")[:1024], inline=True)
+
     embed.add_field(name="Classe", value=(data.classe or "—")[:1024], inline=True)
 
-    # Eroiche e Peculiarità side by side (inline=True) — BEFORE inline=False fields
+
+    # Force a new row before Eroiche and Peculiarità
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
+
+    # Third row: Eroiche and Peculiarità on same row (inline)
     if data.abilita:
         abilita_text = (data.abilita or "")[:1024]
         embed.add_field(name="Eroiche", value=abilita_text, inline=True)
