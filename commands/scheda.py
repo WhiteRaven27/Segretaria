@@ -58,6 +58,47 @@ class SchedaCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def _replace_gallery_message(self, interaction: discord.Interaction, character: CharacterData):
+        """Safely replace the previous gallery card for this character/user."""
+        if not interaction.guild:
+            return
+
+        channel_id = await get_gallery_channel(interaction.guild.id)
+        if not channel_id:
+            return
+
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            return
+
+        previous_message_id = getattr(character, "gallery_message_id", None)
+        if previous_message_id:
+            try:
+                old_message = await channel.fetch_message(previous_message_id)
+                await old_message.delete()
+            except discord.NotFound:
+                pass
+            except discord.Forbidden:
+                print(f"Nessun permesso per eliminare il messaggio gallery {previous_message_id}")
+            except Exception as e:
+                print(f"Errore durante la cancellazione del messaggio gallery: {e}")
+            finally:
+                if previous_message_id in self.bot.message_owners:
+                    del self.bot.message_owners[previous_message_id]
+                await save_message_owners(self.bot.message_owners)
+
+        try:
+            msg = await channel.send(
+                content="Scheda di " + interaction.user.mention,
+                embed=create_embed(character)
+            )
+            character.gallery_message_id = msg.id
+            self.bot.message_owners[msg.id] = interaction.user.id
+            await save_message_owners(self.bot.message_owners)
+            await save_character(interaction.user.id, character)
+        except Exception as e:
+            print("Errore nel post gallery:", e)
+
     @discord.app_commands.command(
         name="scheda",
         description="Carica una scheda da Google Sheets e la salva."
@@ -147,26 +188,7 @@ class SchedaCog(commands.Cog):
             )
 
         # 8. Post to gallery if configured
-        async def post_gallery():
-            try:
-                if not interaction.guild:
-                    return
-                cid = await get_gallery_channel(interaction.guild.id)
-                if not cid:
-                    return
-                ch = self.bot.get_channel(cid)
-                if ch:
-                    msg = await ch.send(
-                        content="Scheda di " + interaction.user.mention,
-                        embed=create_embed(data)
-                    )
-                    # Traccia per permettere cancellazione con reazione X
-                    self.bot.message_owners[msg.id] = interaction.user.id
-                    await save_message_owners(self.bot.message_owners)
-            except Exception as e:
-                print("Errore nel post gallery:", e)
-
-        asyncio.create_task(post_gallery())
+        asyncio.create_task(self._replace_gallery_message(interaction, data))
 
         # 9. Ephemeral confirmation only (embed goes only to gallery)
         await interaction.followup.send("Scheda caricata.", ephemeral=True)
@@ -253,26 +275,7 @@ class SchedaCog(commands.Cog):
                 ephemeral=True
             )
 
-        async def post_gallery():
-            try:
-                if not interaction.guild:
-                    return
-                cid = await get_gallery_channel(interaction.guild.id)
-                if not cid:
-                    return
-                ch = self.bot.get_channel(cid)
-                if ch:
-                    msg = await ch.send(
-                        content="Scheda aggiornata di " + interaction.user.mention,
-                        embed=create_embed(existing)
-                    )
-                    # Traccia per permettere cancellazione con reazione X
-                    self.bot.message_owners[msg.id] = interaction.user.id
-                    await save_message_owners(self.bot.message_owners)
-            except Exception as e:
-                print("Errore nel post gallery:", e)
-
-        asyncio.create_task(post_gallery())
+        asyncio.create_task(self._replace_gallery_message(interaction, existing))
 
         await interaction.followup.send("Scheda aggiornata.", ephemeral=True)
 
