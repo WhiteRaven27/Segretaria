@@ -87,6 +87,7 @@ def _init_db():
             link         TEXT DEFAULT '',
             immagine     TEXT DEFAULT NULL,
             hex_color    TEXT DEFAULT '#5865F2',
+            gallery_message_id INTEGER DEFAULT NULL,
             PRIMARY KEY (user_id, character_id)
         )
     """)
@@ -98,6 +99,11 @@ def _init_db():
     # Migrazione per aggiungere la colonna peculiarita
     try:
         conn.execute("ALTER TABLE characters ADD COLUMN peculiarita TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Colonna già esistente — ignoriamo
+    # Migrazione per aggiungere gallery_message_id per tracciare il messaggio
+    try:
+        conn.execute("ALTER TABLE characters ADD COLUMN gallery_message_id INTEGER DEFAULT NULL")
     except sqlite3.OperationalError:
         pass  # Colonna già esistente — ignoriamo
     conn.execute("""
@@ -140,12 +146,13 @@ class CharacterData:
         self.link = ""
         self.immagine = None
         self.hex_color = "#5865F2"
+        self.gallery_message_id = None
 
 
 def _row_to_obj(row: sqlite3.Row) -> CharacterData:
     obj = CharacterData(character_id=row["character_id"])
     for key in ("nome", "identita", "origine", "tema", "descrizione",
-                "livello", "classe", "abilita", "peculiarita", "link", "immagine", "hex_color"):
+                "livello", "classe", "abilita", "peculiarita", "link", "immagine", "hex_color", "gallery_message_id"):
         setattr(obj, key, row[key])
     return obj
 
@@ -178,13 +185,14 @@ def create_embed(data: CharacterData) -> discord.Embed:
     embed.add_field(name="Livello", value=(data.livello or "—")[:1024], inline=True)
     embed.add_field(name="Classe", value=(data.classe or "—")[:1024], inline=True)
 
+    # Eroiche e Peculiarità side by side (inline=True)
     if data.abilita:
         abilita_text = (data.abilita or "")[:1024]
-        embed.add_field(name="Eroiche", value=abilita_text, inline=False)
+        embed.add_field(name="Eroiche", value=abilita_text, inline=True)
 
     if data.peculiarita:
         peculiarita_text = (data.peculiarita or "")[:1024]
-        embed.add_field(name="Peculiarità", value=peculiarita_text, inline=False)
+        embed.add_field(name="Peculiarità", value=peculiarita_text, inline=True)
 
     if data.link:
         embed.add_field(name="Scheda", value=(data.link or "")[:1024], inline=False)
@@ -229,6 +237,7 @@ async def read_all() -> dict:
                 "link": row["link"],
                 "immagine": row["immagine"],
                 "hex_color": row["hex_color"],
+                "gallery_message_id": row["gallery_message_id"],
             }
         return data
     return await asyncio.to_thread(_read)
@@ -277,13 +286,14 @@ async def save_character(user_id, obj: CharacterData):
             conn.execute("""
                 INSERT OR REPLACE INTO characters
                     (user_id, character_id, nome, identita, origine, tema,
-                     descrizione, livello, classe, abilita, peculiarita, link, immagine, hex_color)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     descrizione, livello, classe, abilita, peculiarita, link, immagine, hex_color, gallery_message_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 str(user_id), obj.character_id,
                 obj.nome, obj.identita, obj.origine, obj.tema,
                 obj.descrizione, obj.livello, obj.classe, obj.abilita,
                 obj.peculiarita, obj.link, obj.immagine, obj.hex_color,
+                obj.gallery_message_id,
             ))
             conn.commit()
 
