@@ -102,6 +102,10 @@ _TEMA_ROW   = 7
 _TEMA_START = 12   # M
 _TEMA_END   = 16   # Q
 
+# Peculiarità: L12 (row index 11, col 11)
+_PECULIARITA_ROW = 11  # Row 12 in spreadsheet
+_PECULIARITA_COL = 16  # Q column (0-indexed)
+
 # Offset from a CLASSE label to: class name (+2), class level (+8)
 _CLASSE_NAME_OFFSET  = 2
 _CLASSE_LEVEL_OFFSET = 8
@@ -168,7 +172,7 @@ def parse_character(csv_text: str) -> dict:
     """
     Parse a Fabula Ultima character sheet exported as CSV.
     Returns a dict with keys: nome, livello, identita, tema, origine,
-                               classe, abilita, immagine.
+                               classe, abilita, peculiarita, immagine.
     """
     grid = list(csv.reader(io.StringIO(csv_text)))[:_MAX_CSV_ROWS + 1]
 
@@ -186,6 +190,9 @@ def parse_character(csv_text: str) -> dict:
         if val and val.lower() not in _SKIP_ABILITA and not val.replace(".", "").isdigit():
             tema = val
             break
+
+    # ── Peculiarità: Q12 (row 11, col 16) ──────────────────
+    peculiarita = _cell(grid, _PECULIARITA_ROW, _PECULIARITA_COL)
 
     # ── Classes ────────────────────────────────────────────
     classi = []
@@ -227,5 +234,6 @@ def parse_character(csv_text: str) -> dict:
         "livello":  livello  or "—",
         "classe":   classe   or "—",
         "abilita":  abilita,
+        "peculiarita": peculiarita or "",
         "immagine": immagine or None,
     }
